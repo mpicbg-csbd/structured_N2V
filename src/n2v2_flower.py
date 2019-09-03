@@ -33,23 +33,19 @@ from segtools.defaults.ipython import moviesave
 
 import torch_models
 
-## bash command to run this script on the cluster. replace `00x` with uniqe id.
 
 ## copy and paste this command into bash to run a job via the job management queueing system.
 
 bashcmd = """
-mkdir -p /lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower_test/
-cp n2v2_flower.py /lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower_test/
-srun -J flw3_10 -n 1 -c 1 --mem=128000 -p gpu --gres=gpu:1 --time=12:00:00 -e std.err.flower_test -o std.out.flower_test time python3 /lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower_test/n2v2_flower.py &
+srcdir=/lustre/projects/project-broaddus/denoise_code/src/
+flowerdir=/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower_test/
+mkdir -p $flowerdir
+cp $srcdir/n2v2_flower.py $srcdir/torch_models.py $flowerdir
+srun -J flw_test -n 1 -c 1 --mem=128000 -p gpu --gres=gpu:1 --time=12:00:00 -e $flowerdir/stderr -o $flowerdir/stdout \
+time python3 $flowerdir/n2v2_flower.py &
 """
-
-bashcmd = """
-mkdir -p /lustre/projects/project-broaddus/denoise_experiments/flower/e02/flower1_1/
-cp n2v2_flower.py /lustre/projects/project-broaddus/denoise_experiments/flower/e02/flower1_1/
-srun -J flw1_1 -n 1 -c 1 --mem=128000 -p gpu --gres=gpu:1 --time=12:00:00 -e std.err.flower1_1 -o std.out.flower1_1 time python3 /lustre/projects/project-broaddus/denoise_experiments/flower/e02/flower1_1/n2v2_flower.py &
-"""
-
-savedir = Path('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower_test') #/flower3_9/')
+experiments_dir = Path('/lustre/projects/project-broaddus/denoise_experiments/').resolve()
+savedir = Path(experiments_dir/'flower/e01/flower_test') #/flower3_9/')
 
 ## lightweight funcs and utils
 
@@ -455,105 +451,48 @@ def plot_losses(d,ta):
   # plt.scatter(np.r_[0:N],np.ones(N)*1,c=colors)
   plt.savefig(d.savedir / 'lossdist_unsorted.pdf')
 
-def e01_fig2_flower():
-  # img1 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_1/epochs_npy/arr_600.npy')
-  # img2 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_2/epochs_npy/arr_600.npy')
-  # img3 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_3/epochs_npy/arr_600.npy')
-  # img4 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_4/epochs_npy/arr_600.npy')
-  # img5 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_5/epochs_npy/arr_600.npy')
-  img6 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_6/epochs_npy/arr_600.npy')
-  img7 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_7/epochs_npy/arr_600.npy')
-  img8 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_8/epochs_npy/arr_600.npy')
-  img9 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_9/epochs_npy/arr_600.npy')
-  img10 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_10/epochs_npy/arr_600.npy')
-  img11 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_11/epochs_npy/arr_600.npy')
-  img12 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_12/epochs_npy/arr_600.npy')
-  img13 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_13/epochs_npy/arr_600.npy')
-  img14 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_14/epochs_npy/arr_600.npy')
-  img15 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_15/epochs_npy/arr_600.npy')
-  img16 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_16/epochs_npy/arr_600.npy')
+def predict_on_full_flower_for_all_e01_models():
 
-  ## (N2V, OURS 2class, OURS 3class) , (raw, mask, raw fft, pred, pred fft) , n_samples , channels, y , x
-  # rgb = stak(img1, img2, img3, img4, img5, img6, img7, img8, img9)
-  rgb = stak(img6, img7, img8, img9, img10, img11, img12, img13, img14, img15, img16,)
+  savedir = Path('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower_test') #/flower3_9/')
 
-  # rgb[:,[2,4]] = normalize3(rgb[:,[2,4]], pmin=0, pmax=99.0)
-  # rgb[:,[2,4]] = normalize3(np.log(rgb[:,[2,4]]+1e-7))
-  rgb[:,[2,4]] = normalize3(np.log(normalize3(rgb[:,[2,4]],0,99)+1e-7))
-  rgb[:,[0,3]] = normalize3(rgb[:,[0,3]])
-  rgb[:,1]     = normalize3(rgb[:,1])
+  dirs = [
+    # "flower3_1",
+    # "flower3_2",
+    # "flower3_3",
+    # "flower3_4",
+    # "flower3_5",
+    "flower3_6",
+    "flower3_7",
+    "flower3_8",
+    "flower3_9",
+    "flower3_10",
+    "flower3_11",
+    "flower3_12",
+    "flower3_13",
+    "flower3_14",
+    "flower3_15",
+    "flower3_16",
+    ]
 
-  ## remove channels and pad xy with white
-  rgb = rgb[:,:,:,0]
-  # rgb = np.pad(rgb,[(0,0),(0,0),(0,0),(0,1),(0,1)],mode='constant',constant_values=1)
+  for dir in dirs:
 
-  # plt.figure()
-  # d = np.fft.fftshift(np.fft.fftfreq(256))
-  # for i,m in enumerate("N2V,OURS 2class,OURS 3class".split(',')):
-  #   plt.plot(d,rgb[i,-1].mean((0,1)),label=f'{m} : avg s,y')
-  #   plt.plot(d,rgb[i,-1].mean((0,2)),label=f'{m} : avg s,x')
-  # plt.legend()
-
-  ## reshape to (raw, N2V, ours 2 class, ours 3class) , (real, fft, mask), samples, y, x
-
-  # rgb = rgb.reshape((15, 4, 256, 256))[]
-  rgb = cat(stak(np.zeros(rgb[0,0].shape),rgb[0,0],rgb[0,2])[None],rgb[:,[1,3,4]])
-
-  ## models, types, samples, y, x
-  # rgb = collapse2(rgb,'mtsyx','mt,sy,x')
-  # rgb = rgb[[0,1,2,3,4,6,8,9,11,13,14]]
-  # rgb = rgb[[0,1,5,8,3,6,9,2,4,7,10,]]
-  # rgb = collapse2(rgb,'myx','y,mx')
-
-  # io.imsave(savedir.parent/'shutterclosed_normalized.png',rgb[:64])
-  np.savez_compressed(savedir.parent / 'e01_fig2_flower.npz', rgb=rgb)
-
-  return rgb
-
-def e02_fig2_flower():
-  img6 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e02/flower1_1/epochs_npy/arr_400.npy')
-  img7 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e02/flower1_2/epochs_npy/arr_400.npy')
-  img8 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e02/flower1_3/epochs_npy/arr_400.npy')
-  img9 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e02/flower1_4/epochs_npy/arr_400.npy')
-
-  ## (N2V, OURS 2class, OURS 3class) , (raw, mask, raw fft, pred, pred fft) , n_samples , channels, y , x
-  rgb = stak(img6, img7, img8, img9)
-
-  ## normalize fft and real space separately
-  rgb[:,[2,4]] = normalize3(np.log(normalize3(rgb[:,[2,4]],0,99)+1e-7))
-  rgb[:,[0,3]] = normalize3(rgb[:,[0,3]])
-  rgb[:,1]     = normalize3(rgb[:,1])
-
-  ## remove channels and pad xy with white
-  rgb = rgb[:,:,:,0]
-  # rgb = np.pad(rgb,[(0,0),(0,0),(0,0),(0,1),(0,1)],mode='constant',constant_values=1)
-
-  ## reshape to (raw, N2V, ours 2 class, ours 3class) , (real, fft, mask), samples, y, x
-  rgb = cat(stak(np.zeros(rgb[0,0].shape),rgb[0,0],rgb[0,2])[None],rgb[:,[1,3,4]])
-
-  np.savez_compressed(savedir.parent / 'e02_fig2_flower.npz', rgb=rgb)
-  return rgb
-
-def predict_on_full_flower():
-  "make movies scrolling through z"
-
-  net  = torch_models.Unet2_2d(16,[[1],[1]],finallayer=nn.ReLU).cuda()
-  # Rob Jenkin (Alana) 540 692 0113
-  net.load_state_dict(torch.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_6/models/net600.pt'))
-  img  = imread(f'/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif')
-  # pmin, pmax = np.random.uniform(1,3), np.random.uniform(99.5,99.8)
-  pmin, pmax = 2, 99.6
-  img  = normalize3(img,pmin,pmax,axs=(1,2)).astype(np.float32,copy=False)
-  pimg = []
-  for x in img:
-    # x = torch.from_numpy(x).cuda()
-    # x = net(x[None])
-    x = apply_net_tiled(net,x[None])
-    pimg.append(x)
-  pimg = np.array(pimg)
-  # return img, net, pimg
-  # pimg = apply_net_tiled(net,img[:,None])
-  imsave(pimg, savedir/f'pred_flower.tif')
+    savedir = Path(f'/lustre/projects/project-broaddus/denoise_experiments/flower/e01/{dir}')
+    net = torch_models.Unet2_2d(16,[[1],[1]],finallayer=nn.ReLU).cuda()
+    net.load_state_dict(torch.load(f'/lustre/projects/project-broaddus/denoise_experiments/flower/e01/{dir}/models/net600.pt'))
+    img  = imread(f'/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif')
+    # pmin, pmax = np.random.uniform(1,3), np.random.uniform(99.5,99.8)
+    pmin, pmax = 2, 99.6
+    img  = normalize3(img,pmin,pmax,axs=(1,2)).astype(np.float32,copy=False)
+    pimg = []
+    for x in img:
+      # x = torch.from_numpy(x).cuda()
+      # x = net(x[None])
+      x = apply_net_tiled(net,x[None])
+      pimg.append(x)
+    pimg = np.array(pimg)
+    # return img, net, pimg
+    # pimg = apply_net_tiled(net,img[:,None])
+    imsave(pimg, savedir/f'pred_flower.tif')
 
 
   # rgb = cat(img, pimg[0], axis=1)
@@ -593,9 +532,13 @@ if __name__=='__main__':
   # net.load_state_dict(torch.load(savedir/'net.pt'))
   # analysis({'net':net})
   # train()
+
   # d = setup()
   # ta = train(d,end_epoch=1001)
-  e01_fig2_flower()
+
+  predict_on_full_flower_for_all_e01_models()
+
+  # e01_fig2_flower()
   # d = SimpleNamespace()
   # d.net = torch_models.Unet2(16,[[1],[1]],finallayer=nn.ReLU).cuda()
   # d.net.load_state_dict(torch.load(savedir/'net099.pt'))
@@ -640,8 +583,8 @@ File history and todo
 =====================
 
 BUG: Why doesn't the line `from utils import point_matcher` fail when moving/running the script from a new folder?
-BUGFIX: in sparse_3set_mask() the mask was the wrong shape.
 
+BUGFIX: in sparse_3set_mask() the mask was the wrong shape.
 
 
 """

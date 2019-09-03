@@ -1,0 +1,54 @@
+## invoke with:
+## snakemake -j 10 --cluster-config cluster.yaml --cluster "sbatch -J {rule} -p {cluster.p} --gres {cluster.gres} " three
+
+localrules: three
+
+rule one:
+  input:
+    "torch_models.py"
+  output:
+    "out1.txt",
+    # "out2.txt"
+  shell:
+    """
+    time {{
+      echo "real run number 1" > out1.txt
+      sleep 20s
+    }}
+    """
+
+rule two:
+  input:
+    # "torch_models.py"
+  output:
+    "out2.txt",
+    # "out2.txt"
+  shell:
+    """
+    time {{
+      echo "this is a 2nd, independent job" > out2.txt
+      sleep 15s
+    }}
+    """
+
+rule three:
+  input:
+    "out1.txt", "out2.txt"
+  output:
+    "out3.txt",
+    # "out2.txt"
+  shell:
+    """
+    time {{
+      cat out1.txt > out3.txt
+      cat out2.txt >> out3.txt
+      sleep 10s
+    }}
+    """
+
+rule clean:
+  shell:
+    """
+    rm out*.txt
+    rm slurm-*.out
+    """

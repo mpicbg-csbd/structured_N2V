@@ -18,7 +18,7 @@ from segtools.numpy_utils import normalize3, perm2, collapse2, splt
 from segtools.StackVis import StackVis
 
 from csbdeep.utils.utils import normalize_minmse
-
+import ipdb
 
 def cat(*args,axis=0): return np.concatenate(args, axis)
 def stak(*args,axis=0): return np.stack(args, axis)
@@ -27,21 +27,14 @@ def imsave(x, name, **kwargs): return tifffile.imsave(str(name), x, **kwargs)
 def imread(name,**kwargs): return tifffile.imread(str(name), **kwargs)
 def imsavefiji(x, **kwargs): return tifffile.imsave('/Users/broaddus/Desktop/stack.tiff', x, imagej=True, **kwargs)
 
-savedir = Path('/Users/broaddus/Desktop/Projects/denoise/').resolve()
-
-def syncall():
-  subdir  = f"flower/e01/" #flower3_10/"
-  sync(savedir / subdir, subdir)
-
-  # for i in range(6):
-  #   subdir  = f"flower/e02/flower1_{i}/"
-  #   sync(savedir / subdir, subdir)
+figure_dir      = Path('/Users/broaddus/Dropbox/phd/notes/denoise_paper/res').resolve()
+experiments_dir = Path('/Volumes/project-broaddus/denoise_experiments').resolve()
+rawdata_dir     = Path('/Volumes/project-broaddus/rawdata').resolve()
 
 ## load data
 
 def eval_01():
-  denoise_dir = Path('/Volumes/project-broaddus/denoise/')
-  data = np.load(denoise_dir/'flower/e01/e01_fig2_flower.npz')['rgb']
+  data = np.load(experiments_dir/'flower/e01/e01_fig2_flower.npz')['rgb']
   names = [
     "raw",
     "n2v",
@@ -59,12 +52,10 @@ def eval_01():
   perm = [0,1,3,4,2,6,7,8,9,10,11,5,]
   data = data[perm]
   names = list(np.array(names)[perm])
-  # iss = StackVis(data)
   return SimpleNamespace(data=data,names=names)
 
 def eval_02():
-  denoise_dir = Path('/Volumes/project-broaddus/denoise/')
-  data = np.load(denoise_dir/'flower/e02/e02_fig2_flower.npz')['rgb']
+  data = np.load(experiments_dir/'flower/e02/e02_fig2_flower.npz')['rgb']
   names = [
     "n2v",
     "n2v^2",
@@ -75,19 +66,20 @@ def eval_02():
     "n2v xxoxx",
     ]
 
-  # iss = StackVis(data)
-  # print(names)
-  # return iss
   return SimpleNamespace(data=data,names=names)
 
 def eval_flower_gt():
-  flower_all = imread('/Users/broaddus/Downloads/20190520_tl_25um_20msec_01pc_488_130EM_Conv.tif')
+  flower_all = imread(rawdata_dir/'artifacts/flower.tif')
   flower_all = normalize3(flower_all,2,99.6)
-  flower_all_patches = flower_all[0].reshape((4,256,4,256)).transpose((0,2,1,3)).reshape((16,256,256))
-  flower_all_patches = flower_all_patches[[0,3,5,12]]
+
+  ## The old way: break it up into patches
+  # flower_all_patches = flower_all[0].reshape((4,256,4,256)).transpose((0,2,1,3)).reshape((16,256,256))
+  # flower_all_patches = flower_all_patches[[0,3,5,12]]
   flower_gt = flower_all.mean(0)
   flower_gt_patches = flower_gt.reshape((4,256,4,256)).transpose((0,2,1,3)).reshape((16,256,256))
   flower_gt_patches = flower_gt_patches[[0,3,5,12]]
+
+  # flower_gt = flower_all.mean(0)
   return flower_gt_patches
 
 def fulldata():
@@ -96,6 +88,303 @@ def fulldata():
   gt  = eval_flower_gt()
   dat = SimpleNamespace(e01=e01,e02=e02,gt=gt)
   return dat
+
+def fulldata2():
+  ## load the flower dataset and build the GT
+  flower_all = imread(rawdata_dir/'artifacts/flower.tif')
+  flower_all = normalize3(flower_all,2,99.6)
+  flower_gt  = flower_all.mean(0)
+  flower_gt_patches = flower_gt.reshape((4,256,4,256)).transpose((0,2,1,3)).reshape((16,256,256))
+  flower_gt_patches = flower_gt_patches[[0,3,5,12]]
+
+  ## load the predictions from single-phase models (600th epoch)
+  img6 = np.load(experiments_dir / 'flower/e01/flower3_6/epochs_npy/arr_600.npy')    # n2v
+  img7 = np.load(experiments_dir / 'flower/e01/flower3_7/epochs_npy/arr_600.npy')    # xox
+  img8 = np.load(experiments_dir / 'flower/e01/flower3_8/epochs_npy/arr_600.npy')    # plus
+  img9 = np.load(experiments_dir / 'flower/e01/flower3_9/epochs_npy/arr_600.npy')    # bigplus
+  img10 = np.load(experiments_dir / 'flower/e01/flower3_10/epochs_npy/arr_600.npy')  # 8xo8x
+  img11 = np.load(experiments_dir / 'flower/e01/flower3_11/epochs_npy/arr_600.npy')  # xxoxx
+  img12 = np.load(experiments_dir / 'flower/e01/flower3_12/epochs_npy/arr_600.npy')  # xxxoxxx
+  img13 = np.load(experiments_dir / 'flower/e01/flower3_13/epochs_npy/arr_600.npy')  # xxxxoxxxx
+  img14 = np.load(experiments_dir / 'flower/e01/flower3_14/epochs_npy/arr_600.npy')  # xxxxxoxxxxx
+  img15 = np.load(experiments_dir / 'flower/e01/flower3_15/epochs_npy/arr_600.npy')  # xxxxxxoxxxxxx
+  img16 = np.load(experiments_dir / 'flower/e01/flower3_16/epochs_npy/arr_600.npy')  # xxxxxxxoxxxxxxx
+
+  names = [
+    "raw",
+    "n2v",
+    "xox",
+    "plus",
+    "bigplus",
+    "8xo8x",
+    "xxoxx",
+    "xxxoxxx",
+    "xxxxoxxxx",
+    "xxxxxoxxxxx",
+    "xxxxxxoxxxxxx",
+    "xxxxxxxoxxxxxxx",
+    ]
+
+
+  data = stak(img6, img7, img8, img9, img10, img11, img12, img13, img14, img15, img16,)
+
+  data[:,[2,4]] = normalize3(np.log(normalize3(data[:,[2,4]],0,99)+1e-7)) ## k-space channels
+  data[:,[0,3]] = normalize3(data[:,[0,3]]) ## real space channels
+  data[:,1]     = normalize3(data[:,1]) ## mask channel ?
+  data = data[:,:,:,0] ## remove channels dim 
+  data = cat(stak(np.zeros(data[0,0].shape),data[0,0],data[0,2])[None],data[:,[1,3,4]]) ## move raw to front. reshape to ?,4,256,256
+
+  ## put the trials in a sensible order
+  perm = [0,1,3,4,2,6,7,8,9,10,11,5,]
+  data = data[perm]
+  names = list(np.array(names)[perm])
+  e01 = SimpleNamespace(data=data,names=names)
+
+  img1 = np.load(experiments_dir/'flower/e02/flower1_1/epochs_npy/arr_400.npy') # n2v^2
+  img2 = np.load(experiments_dir/'flower/e02/flower1_2/epochs_npy/arr_400.npy') # n2v plus
+  img3 = np.load(experiments_dir/'flower/e02/flower1_3/epochs_npy/arr_400.npy') # n2v bigplus
+  img4 = np.load(experiments_dir/'flower/e02/flower1_4/epochs_npy/arr_400.npy') # n2v xxxxoxxxx
+  img5 = np.load(experiments_dir/'flower/e02/flower1_5/epochs_npy/arr_400.npy') # n2v xox
+  # img6 = np.load(experiments_dir/'flower/e02/flower1_6/epochs_npy/arr_400.npy') # n2v xxoxx
+
+  ## (N2V, OURS 2class, OURS 3class) , (raw, mask, raw fft, pred, pred fft) , n_samples , channels, y , x
+  data = stak(img1, img2, img3, img4, img5, ) #img6)
+
+  ## normalize fft and real space separately
+  data[:,[2,4]] = normalize3(np.log(normalize3(data[:,[2,4]],0,99)+1e-7))
+  data[:,[0,3]] = normalize3(data[:,[0,3]])
+  data[:,1]     = normalize3(data[:,1])
+
+  ## remove channels and pad xy with white
+  data = data[:,:,:,0]
+  # data = np.pad(data,[(0,0),(0,0),(0,0),(0,1),(0,1)],mode='constant',constant_values=1)
+
+  ## reshape to (raw, N2V, ours 2 class, ours 3class) , (real, fft, mask), samples, y, x
+  data = cat(stak(np.zeros(data[0,0].shape),data[0,0],data[0,2])[None],data[:,[1,3,4]])
+
+  names = [
+    "n2v",
+    "n2v^2",
+    "n2v plus",
+    "n2v bigplus",
+    "n2v xxxxoxxxx",
+    "n2v xox",
+    "n2v xxoxx",
+    ]
+
+  e02 = SimpleNamespace(data=data,names=names)
+  
+  dat = SimpleNamespace(gt=flower_gt_patches,e01=e01,e02=e02)
+  return dat
+
+
+def fulldata_fullpatch():
+  ## load the flower dataset and build the GT
+  flower_all = imread(rawdata_dir/'artifacts/flower.tif')
+  flower_all = normalize3(flower_all,2,99.6)
+  flower_gt  = flower_all.mean(0)
+  # flower_gt_patches = flower_gt.reshape((4,256,4,256)).transpose((0,2,1,3)).reshape((16,256,256))
+  # flower_gt_patches = flower_gt_patches[[0,3,5,12]]
+
+  ## load the predictions from single-phase models (600th epoch)
+  img6 = imread(experiments_dir / 'flower/e01/flower3_6/pred_flower.tif')      # n2v
+  img7 = imread(experiments_dir / 'flower/e01/flower3_7/pred_flower.tif')      # xox
+  # img8 = imread(experiments_dir / 'flower/e01/flower3_8/pred_flower.tif')    # plus
+  # img9 = imread(experiments_dir / 'flower/e01/flower3_9/pred_flower.tif')    # bigplus
+  # img10 = imread(experiments_dir / 'flower/e01/flower3_10/pred_flower.tif')  # 8xo8x
+  # img11 = imread(experiments_dir / 'flower/e01/flower3_11/pred_flower.tif')  # xxoxx
+  # img12 = imread(experiments_dir / 'flower/e01/flower3_12/pred_flower.tif')  # xxxoxxx
+  # img13 = imread(experiments_dir / 'flower/e01/flower3_13/pred_flower.tif')  # xxxxoxxxx
+  # img14 = imread(experiments_dir / 'flower/e01/flower3_14/pred_flower.tif')  # xxxxxoxxxxx
+  # img15 = imread(experiments_dir / 'flower/e01/flower3_15/pred_flower.tif')  # xxxxxxoxxxxxx
+  # img16 = imread(experiments_dir / 'flower/e01/flower3_16/pred_flower.tif')  # xxxxxxxoxxxxxxx
+
+  names_e01 = [
+    # "raw",
+    "n2v",
+    "xox",
+    # "plus",
+    # "bigplus",
+    # "8xo8x",
+    # "xxoxx",
+    # "xxxoxxx",
+    # "xxxxoxxxx",
+    # "xxxxxoxxxxx",
+    # "xxxxxxoxxxxxx",
+    # "xxxxxxxoxxxxxxx",
+    ]
+
+
+  data = stak(img6, img7) #, img8, img9, img10, img11, img12, img13, img14, img15, img16,)
+
+  # data[:,[2,4]] = normalize3(np.log(normalize3(data[:,[2,4]],0,99)+1e-7)) ## k-space channels
+  # data[:,[0,3]] = normalize3(data[:,[0,3]]) ## real space channels
+  # data[:,1]     = normalize3(data[:,1]) ## mask channel ?
+
+  data = data[:,:,0] ## remove channels dim 
+  ipdb.set_trace()
+  # data = normalize3(data,axes=(1,2,3,))
+
+  # data = cat(stak(np.zeros(data[0,0].shape),data[0,0],data[0,2])[None],data[:,[1,3,4]]) ## move raw to front. reshape to ?,4,256,256
+
+  ## put the trials in a sensible order
+  # perm = [0,1,3,4,2,6,7,8,9,10,11,5,]
+  # data = data[perm]
+  # names = list(np.array(names)[perm])
+  e01 = SimpleNamespace(data=data,names=names,gt=flower_gt,all=flower_all)
+
+  return e01
+
+  if False:
+    img1 = np.load(experiments_dir/'flower/e02/flower1_1/epochs_npy/arr_400.npy') # n2v^2
+    img2 = np.load(experiments_dir/'flower/e02/flower1_2/epochs_npy/arr_400.npy') # n2v plus
+    img3 = np.load(experiments_dir/'flower/e02/flower1_3/epochs_npy/arr_400.npy') # n2v bigplus
+    img4 = np.load(experiments_dir/'flower/e02/flower1_4/epochs_npy/arr_400.npy') # n2v xxxxoxxxx
+    img5 = np.load(experiments_dir/'flower/e02/flower1_5/epochs_npy/arr_400.npy') # n2v xox
+    # img6 = np.load(experiments_dir/'flower/e02/flower1_6/epochs_npy/arr_400.npy') # n2v xxoxx
+
+    ## (N2V, OURS 2class, OURS 3class) , (raw, mask, raw fft, pred, pred fft) , n_samples , channels, y , x
+    data = stak(img1, img2, img3, img4, img5, ) #img6)
+
+    ## normalize fft and real space separately
+    data[:,[2,4]] = normalize3(np.log(normalize3(data[:,[2,4]],0,99)+1e-7))
+    data[:,[0,3]] = normalize3(data[:,[0,3]])
+    data[:,1]     = normalize3(data[:,1])
+
+    ## remove channels and pad xy with white
+    data = data[:,:,:,0]
+    # data = np.pad(data,[(0,0),(0,0),(0,0),(0,1),(0,1)],mode='constant',constant_values=1)
+
+    ## reshape to (raw, N2V, ours 2 class, ours 3class) , (real, fft, mask), samples, y, x
+    data = cat(stak(np.zeros(data[0,0].shape),data[0,0],data[0,2])[None],data[:,[1,3,4]])
+
+    names = [
+      "n2v",
+      "n2v^2",
+      "n2v plus",
+      "n2v bigplus",
+      "n2v xxxxoxxxx",
+      "n2v xox",
+      "n2v xxoxx",
+      ]
+
+  # e02 = SimpleNamespace(data=data,names=names)
+
+  dat = SimpleNamespace(gt=flower_gt,e01=e01,)#e02=e02)
+  return dat
+
+
+
+
+@DeprecationWarning
+def e01_fig2_flower():
+  # img1 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_1/epochs_npy/arr_600.npy')
+  # img2 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_2/epochs_npy/arr_600.npy')
+  # img3 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_3/epochs_npy/arr_600.npy')
+  # img4 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_4/epochs_npy/arr_600.npy')
+  # img5 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_5/epochs_npy/arr_600.npy') 
+  img6 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_6/epochs_npy/arr_600.npy')    # n2v
+  img7 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_7/epochs_npy/arr_600.npy')    # xox
+  img8 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_8/epochs_npy/arr_600.npy')    # plus
+  img9 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_9/epochs_npy/arr_600.npy')    # bigplus
+  img10 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_10/epochs_npy/arr_600.npy')  # 8xo8x
+  img11 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_11/epochs_npy/arr_600.npy')  # xxoxx
+  img12 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_12/epochs_npy/arr_600.npy')  # xxxoxxx
+  img13 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_13/epochs_npy/arr_600.npy')  # xxxxoxxxx
+  img14 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_14/epochs_npy/arr_600.npy')  # xxxxxoxxxxx
+  img15 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_15/epochs_npy/arr_600.npy')  # xxxxxxoxxxxxx
+  img16 = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower3_16/epochs_npy/arr_600.npy')  # xxxxxxxoxxxxxxx
+
+  names = [
+    # "raw",
+    "n2v",
+    "xox",
+    "plus",
+    "bigplus",
+    "8xo8x",
+    "xxoxx",
+    "xxxoxxx",
+    "xxxxoxxxx",
+    "xxxxxoxxxxx",
+    "xxxxxxoxxxxxx",
+    "xxxxxxxoxxxxxxx",
+    ]
+
+  ## (N2V, OURS 2class, OURS 3class) , (raw, mask, raw fft, pred, pred fft) , n_samples , channels, y , x
+  # rgb = stak(img1, img2, img3, img4, img5, img6, img7, img8, img9)
+  rgb = stak(img6, img7, img8, img9, img10, img11, img12, img13, img14, img15, img16,)
+
+  # rgb[:,[2,4]] = normalize3(rgb[:,[2,4]], pmin=0, pmax=99.0)
+  # rgb[:,[2,4]] = normalize3(np.log(rgb[:,[2,4]]+1e-7))
+  rgb[:,[2,4]] = normalize3(np.log(normalize3(rgb[:,[2,4]],0,99)+1e-7)) ## k-space channels
+  rgb[:,[0,3]] = normalize3(rgb[:,[0,3]]) ## real space channels
+  rgb[:,1]     = normalize3(rgb[:,1]) ## mask channel ?
+  rgb = rgb[:,:,:,0] ## remove channels dim 
+  rgb = cat(stak(np.zeros(rgb[0,0].shape),rgb[0,0],rgb[0,2])[None],rgb[:,[1,3,4]]) ## reshape to 15,4,256,256
+
+  # rgb = np.pad(rgb,[(0,0),(0,0),(0,0),(0,1),(0,1)],mode='constant',constant_values=1) ## pad xy with white
+
+  # plt.figure()
+  # d = np.fft.fftshift(np.fft.fftfreq(256))
+  # for i,m in enumerate("N2V,OURS 2class,OURS 3class".split(',')):
+  #   plt.plot(d,rgb[i,-1].mean((0,1)),label=f'{m} : avg s,y')
+  #   plt.plot(d,rgb[i,-1].mean((0,2)),label=f'{m} : avg s,x')
+  # plt.legend()
+
+  ## reshape to (raw, N2V, ours 2 class, ours 3class) , (real, fft, mask), samples, y, x
+
+  # rgb = rgb.reshape((15, 4, 256, 256))[]
+  # rgb = cat(stak(np.zeros(rgb[0,0].shape),rgb[0,0],rgb[0,2])[None],rgb[:,[1,3,4]])
+
+  ## models, types, samples, y, x
+  # rgb = collapse2(rgb,'mtsyx','mt,sy,x')
+  # rgb = rgb[[0,1,2,3,4,6,8,9,11,13,14]]
+  # rgb = rgb[[0,1,5,8,3,6,9,2,4,7,10,]]
+  # rgb = collapse2(rgb,'myx','y,mx')
+
+  # io.imsave(savedir.parent/'shutterclosed_normalized.png',rgb[:64])
+  np.savez_compressed(savedir.parent / 'e01_fig2_flower.npz', rgb=rgb)
+
+  return rgb
+
+@DeprecationWarning
+def e02_fig2_flower():
+  img1 = np.load(experiments_dir/'flower/e02/flower1_1/epochs_npy/arr_400.npy') # n2v^2
+  img2 = np.load(experiments_dir/'flower/e02/flower1_2/epochs_npy/arr_400.npy') # n2v plus
+  img3 = np.load(experiments_dir/'flower/e02/flower1_3/epochs_npy/arr_400.npy') # n2v bigplus
+  img4 = np.load(experiments_dir/'flower/e02/flower1_4/epochs_npy/arr_400.npy') # n2v xxxxoxxxx
+  img5 = np.load(experiments_dir/'flower/e02/flower1_5/epochs_npy/arr_400.npy') # n2v xox
+  img6 = np.load(experiments_dir/'flower/e02/flower1_6/epochs_npy/arr_400.npy') # n2v xxoxx
+
+  names = [
+    "n2v",
+    "n2v^2",
+    "n2v plus",
+    "n2v bigplus",
+    "n2v xxxxoxxxx",
+    "n2v xox",
+    "n2v xxoxx",
+    ]
+
+
+  ## (N2V, OURS 2class, OURS 3class) , (raw, mask, raw fft, pred, pred fft) , n_samples , channels, y , x
+  rgb = stak(img1, img2, img3, img4, img5, img6)
+
+  ## normalize fft and real space separately
+  rgb[:,[2,4]] = normalize3(np.log(normalize3(rgb[:,[2,4]],0,99)+1e-7))
+  rgb[:,[0,3]] = normalize3(rgb[:,[0,3]])
+  rgb[:,1]     = normalize3(rgb[:,1])
+
+  ## remove channels and pad xy with white
+  rgb = rgb[:,:,:,0]
+  # rgb = np.pad(rgb,[(0,0),(0,0),(0,0),(0,1),(0,1)],mode='constant',constant_values=1)
+
+  ## reshape to (raw, N2V, ours 2 class, ours 3class) , (real, fft, mask), samples, y, x
+  rgb = cat(stak(np.zeros(rgb[0,0].shape),rgb[0,0],rgb[0,2])[None],rgb[:,[1,3,4]])
+
+  np.savez_compressed(savedir.parent / 'e02_fig2_flower.npz', rgb=rgb)
+  return rgb
+
 
 ## perform analysis
 
@@ -115,13 +404,13 @@ def noise_distributions(dat=None):
   plt.hlines(0,0,100)
 
   delta = dat.e01.data[:,1] - dat.gt
+  x = np.linspace(0,100,101)
   for i,name in enumerate(dat.e01.names):
-    x = np.linspace(0,100,101)
     plt.plot(x,np.percentile(delta[i].mean(0), x), label=name)
 
   delta = dat.e02.data[:,1] - dat.gt
-  for i,name in enumerate(dat.e02.names):
-    x = np.linspace(0,100,101)
+  x = np.linspace(0,100,101)
+  for i,name in enumerate(dat.e02.names[:-1]):
     plt.plot(x,np.percentile(delta[i].mean(0), x), '--', label=name)
   
   plt.legend()
@@ -150,6 +439,32 @@ def print_metrics(dat):
   headers = ['name','mse','psnr','ssim']
   print(tabulate(zip(*table),headers=headers,floatfmt='f',numalign='decimal'))
 
+def print_metrics_fullpatch(dat):
+
+  ## dataset e01
+
+  # ys = np.array([normalize_minmse(x, dat.gt) for x in dat.e01.data[:,1]])
+  ys   = dat.data[:,0]
+  mse  = ((dat.gt-ys)**2).mean((1,2,3))
+  psnr = 10*np.log10(1/mse)
+  ssim = np.array([[compare_ssim(dat.gt[j],ys[i,j]) for j in range(ys.shape[1])] for i in range(ys.shape[0])])
+
+  table = [dat.e01.names,list(mse),list(psnr),list(ssim.mean(1))]
+  headers = ['name','mse','psnr','ssim']
+  print(tabulate(zip(*table),headers=headers,floatfmt='f',numalign='decimal'))
+
+  ## dataset e02
+  if False:
+
+    ys = np.array([normalize_minmse(x, dat.gt) for x in dat.e02.data[:,1]])
+    mse = ((dat.gt-ys)**2).mean((1,2,3))
+    psnr = 10*np.log10(1/mse)
+    ssim = np.array([[compare_ssim(dat.gt[j],ys[i,j]) for j in range(ys.shape[1])] for i in range(ys.shape[0])])
+
+    table = [dat.e02.names,list(mse),list(psnr),list(ssim.mean(1))]
+    headers = ['name','mse','psnr','ssim']
+    print(tabulate(zip(*table),headers=headers,floatfmt='f',numalign='decimal'))
+
 
 ## Utils or work in progress
 
@@ -157,7 +472,6 @@ def hist(arr):
   x = np.linspace(0,100,101)
   plt.figure()
   plt.plot(x,np.percentile(arr,x),'.-')
-
 
 def signals_in_kspace():
   xs, ys = [],[]
@@ -359,6 +673,13 @@ def sync(savedir, subdir):
   print(res)
   os.remove(name)
 
+def syncall():
+  subdir  = f"flower/e01/" #flower3_10/"
+  sync(savedir / subdir, subdir)
+
+  # for i in range(6):
+  #   subdir  = f"flower/e02/flower1_{i}/"
+  #   sync(savedir / subdir, subdir)
 
 
 
