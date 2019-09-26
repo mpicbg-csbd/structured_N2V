@@ -1,23 +1,24 @@
 import numpy as np
 import tifffile
-from tabulate import tabulate
 import subprocess
 import os
-from  types    import SimpleNamespace
-from pathlib import Path
 
-from matplotlib             import pyplot as plt
-from scipy import ndimage
-from scipy.ndimage              import label, zoom
-from skimage import io
-from skimage.measure import compare_ssim
+from tabulate  import tabulate
+from types     import SimpleNamespace
+from pathlib   import Path
+from itertools import zip_longest
+
+from matplotlib      import pyplot as plt
+from scipy           import ndimage
+from scipy.ndimage   import label, zoom
+from skimage         import io
 from skimage.measure import compare_ssim
 
 # import spimagine
 from segtools.numpy_utils import normalize3, perm2, collapse2, splt
 from segtools.StackVis import StackVis
 
-from csbdeep.utils.utils import normalize_minmse
+# from csbdeep.utils.utils import normalize_minmse
 import ipdb
 
 def cat(*args,axis=0): return np.concatenate(args, axis)
@@ -25,11 +26,14 @@ def stak(*args,axis=0): return np.stack(args, axis)
 
 def imsave(x, name, **kwargs): return tifffile.imsave(str(name), x, **kwargs)
 def imread(name,**kwargs): return tifffile.imread(str(name), **kwargs)
-def imsavefiji(x, **kwargs): return tifffile.imsave('/Users/broaddus/Desktop/stack.tiff', x, imagej=True, **kwargs)
+# def imsavefiji(x, **kwargs): return tifffile.imsave('/Users/broaddus/Desktop/stack.tiff', x, imagej=True, **kwargs)
+def imsavefiji(x, **kwargs): return tifffile.imsave('stack.tiff', x, imagej=True, **kwargs)
 
-figure_dir      = Path('/Users/broaddus/Dropbox/phd/notes/denoise_paper/res').resolve()
-experiments_dir = Path('/Volumes/project-broaddus/denoise_experiments').resolve()
-rawdata_dir     = Path('/Volumes/project-broaddus/rawdata').resolve()
+# figure_dir      = Path('/Users/broaddus/Dropbox/phd/notes/denoise_paper/res').resolve()
+# experiments_dir = Path('/Volumes/project-broaddus/denoise_experiments').resolve()
+figure_dir      = Path('/projects/project-broaddus/denoise_experiments/figures/').resolve(); figure_dir.mkdir(exist_ok=True,parents=True)
+experiments_dir = Path('/projects/project-broaddus/denoise_experiments/').resolve()
+rawdata_dir     = Path('/projects/project-broaddus/rawdata').resolve()
 
 ## load data
 
@@ -178,6 +182,9 @@ def fulldata2():
   return dat
 
 
+
+
+
 def fulldata_fullpatch():
   ## load the flower dataset and build the GT
   flower_all = imread(rawdata_dir/'artifacts/flower.tif')
@@ -187,53 +194,52 @@ def fulldata_fullpatch():
   # flower_gt_patches = flower_gt_patches[[0,3,5,12]]
 
   ## load the predictions from single-phase models (600th epoch)
-  img6 = imread(experiments_dir / 'flower/e01/flower3_6/pred_flower.tif')      # n2v
-  img7 = imread(experiments_dir / 'flower/e01/flower3_7/pred_flower.tif')      # xox
-  # img8 = imread(experiments_dir / 'flower/e01/flower3_8/pred_flower.tif')    # plus
-  # img9 = imread(experiments_dir / 'flower/e01/flower3_9/pred_flower.tif')    # bigplus
-  # img10 = imread(experiments_dir / 'flower/e01/flower3_10/pred_flower.tif')  # 8xo8x
-  # img11 = imread(experiments_dir / 'flower/e01/flower3_11/pred_flower.tif')  # xxoxx
-  # img12 = imread(experiments_dir / 'flower/e01/flower3_12/pred_flower.tif')  # xxxoxxx
-  # img13 = imread(experiments_dir / 'flower/e01/flower3_13/pred_flower.tif')  # xxxxoxxxx
-  # img14 = imread(experiments_dir / 'flower/e01/flower3_14/pred_flower.tif')  # xxxxxoxxxxx
-  # img15 = imread(experiments_dir / 'flower/e01/flower3_15/pred_flower.tif')  # xxxxxxoxxxxxx
-  # img16 = imread(experiments_dir / 'flower/e01/flower3_16/pred_flower.tif')  # xxxxxxxoxxxxxxx
+  img6 = imread(experiments_dir / 'flower/e01/flower3_6/pred_flower.tif')    # 1   n2v
+  img7 = imread(experiments_dir / 'flower/e01/flower3_7/pred_flower.tif')    # 2   xox
+  img8 = imread(experiments_dir / 'flower/e01/flower3_8/pred_flower.tif')    # 3   plus
+  img9 = imread(experiments_dir / 'flower/e01/flower3_9/pred_flower.tif')    # 4   bigplus
+  img10 = imread(experiments_dir / 'flower/e01/flower3_10/pred_flower.tif')  # 5   8xo8x
+  img11 = imread(experiments_dir / 'flower/e01/flower3_11/pred_flower.tif')  # 6   xxoxx
+  img12 = imread(experiments_dir / 'flower/e01/flower3_12/pred_flower.tif')  # 7   xxxoxxx
+  img13 = imread(experiments_dir / 'flower/e01/flower3_13/pred_flower.tif')  # 8   xxxxoxxxx
+  img14 = imread(experiments_dir / 'flower/e01/flower3_14/pred_flower.tif')  # 9   xxxxxoxxxxx
+  img15 = imread(experiments_dir / 'flower/e01/flower3_15/pred_flower.tif')  # 10  xxxxxxoxxxxxx
+  img16 = imread(experiments_dir / 'flower/e01/flower3_16/pred_flower.tif')  # 11  xxxxxxxoxxxxxxx
 
   names_e01 = [
-    # "raw",
     "n2v",
     "xox",
-    # "plus",
-    # "bigplus",
-    # "8xo8x",
-    # "xxoxx",
-    # "xxxoxxx",
-    # "xxxxoxxxx",
-    # "xxxxxoxxxxx",
-    # "xxxxxxoxxxxxx",
-    # "xxxxxxxoxxxxxxx",
+    "plus",
+    "bigplus",
+    "8xo8x",
+    "xxoxx",
+    "xxxoxxx",
+    "xxxxoxxxx",
+    "xxxxxoxxxxx",
+    "xxxxxxoxxxxxx",
+    "xxxxxxxoxxxxxxx",
     ]
 
 
-  data = stak(img6, img7) #, img8, img9, img10, img11, img12, img13, img14, img15, img16,)
+  data = stak(img6, img7, img8, img9, img10, img11, img12, img13, img14, img15, img16,)
 
   # data[:,[2,4]] = normalize3(np.log(normalize3(data[:,[2,4]],0,99)+1e-7)) ## k-space channels
   # data[:,[0,3]] = normalize3(data[:,[0,3]]) ## real space channels
   # data[:,1]     = normalize3(data[:,1]) ## mask channel ?
 
-  data = data[:,:,0] ## remove channels dim 
-  ipdb.set_trace()
-  # data = normalize3(data,axes=(1,2,3,))
+  ## remove channels dim 
+  data = data[:,:,0]
 
-  # data = cat(stak(np.zeros(data[0,0].shape),data[0,0],data[0,2])[None],data[:,[1,3,4]]) ## move raw to front. reshape to ?,4,256,256
+  ## move raw to front. reshape to ?,4,256,256
+  # data = cat(stak(np.zeros(data[0,0].shape),data[0,0],data[0,2])[None],data[:,[1,3,4]]) 
 
   ## put the trials in a sensible order
-  # perm = [0,1,3,4,2,6,7,8,9,10,11,5,]
+
+  # perm = [0, 2, 3, 1, 5, 6, 7, 8, 9, 10, 4,]
   # data = data[perm]
   # names = list(np.array(names)[perm])
-  e01 = SimpleNamespace(data=data,names=names,gt=flower_gt,all=flower_all)
 
-  return e01
+  e01 = SimpleNamespace(data=data,names=names_e01)
 
   if False:
     img1 = np.load(experiments_dir/'flower/e02/flower1_1/epochs_npy/arr_400.npy') # n2v^2
@@ -270,7 +276,7 @@ def fulldata_fullpatch():
 
   # e02 = SimpleNamespace(data=data,names=names)
 
-  dat = SimpleNamespace(gt=flower_gt,e01=e01,)#e02=e02)
+  dat = SimpleNamespace(gt=flower_gt,e01=e01,all=flower_all) #e02=e02)
   return dat
 
 
@@ -440,18 +446,33 @@ def print_metrics(dat):
   print(tabulate(zip(*table),headers=headers,floatfmt='f',numalign='decimal'))
 
 def print_metrics_fullpatch(dat):
+  """
+  Running on full dataset takes XXX seconds.
+  """
 
   ## dataset e01
+  # dat.e01.data = dat.e01.data[:,::30]
 
+  ## first do all the denoising models
   # ys = np.array([normalize_minmse(x, dat.gt) for x in dat.e01.data[:,1]])
-  ys   = dat.data[:,0]
+  ys   = dat.e01.data #[:,0] ys.shape == (11,100,1024,1024) == model,sample_i,y,x
   mse  = ((dat.gt-ys)**2).mean((1,2,3))
   psnr = 10*np.log10(1/mse)
-  ssim = np.array([[compare_ssim(dat.gt[j],ys[i,j]) for j in range(ys.shape[1])] for i in range(ys.shape[0])])
+  ssim = np.array([[compare_ssim(dat.gt,ys[i,j]) for j in range(ys.shape[1])] for i in range(ys.shape[0])])
+  ssim = ssim.mean(1)
 
-  table = [dat.e01.names,list(mse),list(psnr),list(ssim.mean(1))]
-  headers = ['name','mse','psnr','ssim']
-  print(tabulate(zip(*table),headers=headers,floatfmt='f',numalign='decimal'))
+  table = [dat.e01.names, list(mse), list(psnr), list(ssim)]
+  table = list(zip_longest(*table))
+
+  ## then we'll do the raw data
+  ys   = dat.all # (100,1024,1024) == sample_i,y,x
+  mse  = ((dat.gt-ys)**2).mean((0,1,2))
+  psnr = 10*np.log10(1/mse)
+  ssim = np.array([compare_ssim(dat.gt,ys[i]) for i in range(100)])
+  ssim = ssim.mean(0)
+  table = [["raw",mse,psnr,ssim]] + table
+  
+  print(tabulate(table,headers=['name','mse','psnr','ssim'],floatfmt='f',numalign='decimal'))
 
   ## dataset e02
   if False:

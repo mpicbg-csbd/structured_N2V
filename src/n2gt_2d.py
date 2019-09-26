@@ -38,16 +38,18 @@ import torch_models
 
 # bashcmd = """
 # srcdir=/lustre/projects/project-broaddus/denoise_code/src/
-# flowerdir=/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower_test/
-# mkdir -p $flowerdir
-# cp $srcdir/n2v2_flower.py $srcdir/torch_models.py $flowerdir
-# srun -J flower_test -n 1 -c 1 --mem=128000 -p gpu --gres=gpu:1 --time=12:00:00 -e $flowerdir/stderr -o $flowerdir/stdout \
-# time python3 $flowerdir/n2v2_flower.py &
+# flowerdir=/lustre/projects/project-broaddus/denoise_experiments/flower/e01/n2gt/
+# rm -rf $flowerdir/*
+# mkdir -p $flowerdir/{epochs,epochs_npy,pimgs,pts,movie,counts,models}
+# cp $srcdir/n2gt_2d.py $srcdir/torch_models.py $flowerdir
+# srun -J n2gt_2d -n 1 -c 1 --mem=128000 -p gpu --gres=gpu:1 --time=12:00:00 -e $flowerdir/stderr -o $flowerdir/stdout \
+# time python3 $flowerdir/n2gt_2d.py &
 # """
-# experiments_dir = Path('/lustre/projects/project-broaddus/denoise_experiments/').resolve()
-# savedir = Path(experiments_dir/'flower/e01/flower_test') #/flower3_9/')
 
-## lightweight funcs and utils shared
+experiments_dir = Path('/lustre/projects/project-broaddus/denoise_experiments/').resolve()
+savedir = Path(experiments_dir/'flower/e01/n2gt').resolve() #/flower3_9/')
+
+## lightweight funcs and utils
 
 def init_dirs(savedir):
   savedir.mkdir(exist_ok=True)
@@ -58,9 +60,6 @@ def init_dirs(savedir):
   (savedir/'movie/').mkdir(exist_ok=True)
   (savedir/'counts/').mkdir(exist_ok=True)
   (savedir/'models/').mkdir(exist_ok=True)
-
-  # shutil.copy2('/lustre/projects/project-broaddus/denoise_code/src/n2v2_flower.py', savedir)
-  # shutil.copy2('/lustre/projects/project-broaddus/denoise_code/src/torch_models.py', savedir)
 
 def wipe_dirs(savedir):
   if savedir.exists():
@@ -127,51 +126,14 @@ def init_training_artifacts():
   ta.e = 0
   return ta
 
-def plot_losses(d,ta):
-  
-  ## plot simple loss trajectory
-
-  plt.figure()
-  plt.plot(ta.losses)
-  plt.ylim(0,ta.losses[0])
-  plt.savefig(d.savedir/'loss.pdf')
-
-  ## plot loss distribution trajectories
-
-  lds = ta.lossdists[1::3]
-  N   = len(lds)
-  colors = color.pastel_colors_RGB(N,max_saturation=0.9,brightness=0.8,shuffle=False)
-  # colors = np.arange(N)[:,None][:,[0,0,0]] * (15,-15,15) + (15,240,15)
-  # colors = colors/255
-  plt.figure()
-  for i in np.arange(N):
-    plt.plot(sorted(lds[i]),'.',color=colors[i]+[0.25])
-  # plt.ylim(0,np.max(lds))
-  # plt.scatter(np.r_[0:N],np.ones(N)*1,c=colors)
-  plt.savefig(savedir / 'lossdist.pdf')
-  plt.figure()
-  for i in np.arange(N):
-    plt.plot(lds[i],'.',color=colors[i]+[0.25])
-  # plt.scatter(np.r_[0:N],np.ones(N)*1,c=colors)
-  plt.savefig(d.savedir / 'lossdist_unsorted.pdf')
-
-def histograms():
-  "cumulative dist of pixel values in img and pimg"
-  plt.figure()
-  x = np.linspace(0,100,100)
-  plt.plot(x,np.percentile(img,x),label='img')
-  plt.plot(x,np.percentile(pimg,x),label='pimg')
-  plt.legend()
-  plt.savefig(savedir/'histogram_img_pimg.pdf')
-
 ## heavier meaty functions
 
 @DeprecationWarning
 def datagen(savedir=None):
 
-  img = imread(f'/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif')
+  # img = imread(f'/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif')[:10]
+  img = imread(f'/lustre/projects/project-broaddus/denoise_experiments/flower/e02/pred_flower.tif')[:10]
   # img = imread(f'/lustre/projects/project-broaddus/rawdata/artifacts/shutterclosed.tif')[0]
-  # img = imread(f'/lustre/projects/project-broaddus/denoise_experiments/flower/e02/pred_flower.tif')[:10]
 
   print(img.shape)
   # pmin, pmax = np.random.uniform(1,3), np.random.uniform(99.5,99.8)
@@ -222,18 +184,18 @@ def datagen(savedir=None):
 
   return dg
 
-def setup_flower_shutter(rawdata='/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif',
-                         savedir='/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower_test'):
+def setup(params={}):
 
-  savedir = Path(savedir)
   wipe_dirs(savedir)
   init_dirs(savedir)
-  
-  img = imread(rawdata)
-  pmin, pmax = 2, 99.6
-  print(f"pmin = {pmin}; pmax = {pmax}")
-  img = normalize3(img,pmin,pmax).astype(np.float32,copy=False)
-  data = img.reshape((-1, 4,256,4,256)).transpose((0,1,3,2,4)).reshape((-1,1,256,256))
+
+  # dg = datagen(savedir=savedir)
+  # data = dg.data
+  # data = np.load('/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/data_shutter.npz')['data']
+  # data = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/data_flower3.npz')['data']
+  data = imread('/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif')
+  data = normalize3(data,2,99.6) ## normalize across all dims?
+  # data = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e02/data_flower.npz')['data']
 
   d = SimpleNamespace()
   d.net = torch_models.Unet2_2d(16,[[1],[1]],finallayer=nn.ReLU)
@@ -242,97 +204,115 @@ def setup_flower_shutter(rawdata='/lustre/projects/project-broaddus/rawdata/arti
   d.net.apply(init_weights);
   d.savedir = savedir
 
-  d.x1_all  = torch.from_numpy(data).float()
+  # d.net.load_state_dict(torch.load('/lustre/projects/project-broaddus/devseg_data/cl_datagen/d000/jj000/net250.pt'))
+  # torch.save(d.net.state_dict(), '/lustre/projects/project-broaddus/devseg_data/cl_datagen/rsrc/net_random_init_unet2.pt')
+
+  d.xs  = torch.from_numpy(data).float()
+  d.xs = d.xs.reshape((100,4,256,4,256,1)).permute((0,1,3,5,2,4)) #.reshape((-1,256,256))
+  d.ys = d.xs.mean(0)
+
   return d
 
-def train(d,ta=None,end_epoch=301,mask_shape=[1,2,3,4]):
+def train(d,ta=None,end_epoch=301):
   if ta is None: ta = init_training_artifacts()
 
-  ## set up const variables necessary for training
+  ## setup const variables necessary for training
   batch_size = 4
-  inds = np.arange(0,d.x1_all.shape[0])
-  patch_size = d.x1_all.shape[2:]
-  w1_all = torch.ones(d.x1_all.shape).float()
+  inds = np.arange(0,d.xs.shape[0])
+  patch_size = d.xs.shape[4:]
+  # xs = d.xs.reshape((100,4,256,4,256)).permute((0,1,3,2,4)) #.reshape((-1,256,256))
+  # ys = d.xs.mean(0).reshape((4,256,4,256)).permute((0,2,1,3))
+  # ws = torch.ones(d.xs.shape).float()
 
   ## set up variables for monitoring training
-  # example_xs = d.x1_all[inds[::floor(np.sqrt(len(inds)))]].clone()
-  example_xs = d.x1_all[[0,3,5,12]].clone()
+  # example_xs = d.xs[inds[::floor(np.sqrt(len(inds)))]].clone()
+  example_xs = d.xs[[0,3,5,12]].reshape((-1,1,256,256)).clone()
   xs_fft = torch.fft((example_xs-example_xs.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1)
   xs_fft = torch.from_numpy(np.fft.fftshift(xs_fft,axes=(-1,-2)))
-  lossdist = torch.zeros(d.x1_all.shape[0]) - 2
+  lossdist = torch.zeros(d.xs.shape[0]) - 2
 
-  ## move everything to cuda
+  ## move vars to gpu
   d.net = d.net.cuda()
-  d.x1_all = d.x1_all.cuda()
-  w1_all = w1_all.cuda()
+  d.xs  = d.xs.cuda()
+  d.ys  = d.ys.cuda()
   xs_fft = xs_fft.cuda()
   example_xs = example_xs.cuda()
 
+  ## initialize optimizer (must be done after moving data to gpu ?)
   opt = torch.optim.Adam(d.net.parameters(), lr = 2e-5)
 
   plt.figure()
   for e in range(ta.e,end_epoch):
     ta.e = e
     np.random.shuffle(inds)
+    ta.lossdists.append(lossdist.numpy().copy())
     lossdist[...] = -1
     print(f"\r epoch {e}", end="")
   
-    for b in range(ceil(d.x1_all.shape[0]/batch_size)):
+    for b in range(ceil(d.xs.shape[0]/batch_size)):
       idxs = inds[b*batch_size:(b+1)*batch_size]
-      x1   = d.x1_all[idxs] #.cuda()
-      w1   = w1_all[idxs] #.cuda()
+      x1   = d.xs[idxs]
+      # w1   = d.ws[idxs]
+      # y1   = d.ys[idxs]
 
-      def random_pixel_mask():
-        n = int(np.prod(patch_size) * 0.02)
-        x_inds = np.random.randint(0,patch_size[1],n)
-        y_inds = np.random.randint(0,patch_size[0],n)
-        # z_inds = np.random.randint(0,32,64*64*1)
-        ma = np.zeros(patch_size)
-        ma[y_inds,x_inds] = 2
-        return ma
-      
-      def sparse_3set_mask():
-        "build random mask for small number of central pixels"
-        n = int(np.prod(patch_size) * 0.02)
-        x_inds = np.random.randint(0,patch_size[1],n)
-        y_inds = np.random.randint(0,patch_size[0],n)
-        ma = np.zeros(patch_size)
+      if False:
+        def random_pixel_mask():
+          n = int(np.prod(patch_size) * 0.02)
+          x_inds = np.random.randint(0,patch_size[1],n)
+          y_inds = np.random.randint(0,patch_size[0],n)
+          # z_inds = np.random.randint(0,32,64*64*1)
+          ma = np.zeros(patch_size)
+          ma[y_inds,x_inds] = 2
+          return ma
+        
+        def sparse_3set_mask():
+          "build random mask for small number of central pixels"
+          n = int(np.prod(patch_size) * 0.02)
+          x_inds = np.random.randint(0,patch_size[1],n)
+          y_inds = np.random.randint(0,patch_size[0],n)
+          ma = np.zeros(patch_size)
 
-        # ma = binary_dilation(ma)
+          # ma = binary_dilation(ma)
 
-        for i in mask_shape:
-          m = x_inds-i >= 0;            ma[y_inds[m],x_inds[m]-i] = 1
-          m = x_inds+i < patch_size[1]; ma[y_inds[m],x_inds[m]+i] = 1
-        # for i in [1]:
-        #   m = y_inds-i >= 0;            ma[y_inds[m]-i,x_inds[m]] = 1
-        #   m = y_inds+i < patch_size[0]; ma[y_inds[m]+i,x_inds[m]] = 1
+          for i in [1,2,3,4,5,6,7]:
+            m = x_inds-i >= 0;            ma[y_inds[m],x_inds[m]-i] = 1
+            m = x_inds+i < patch_size[1]; ma[y_inds[m],x_inds[m]+i] = 1
+          # for i in [1]:
+          #   m = y_inds-i >= 0;            ma[y_inds[m]-i,x_inds[m]] = 1
+          #   m = y_inds+i < patch_size[0]; ma[y_inds[m]+i,x_inds[m]] = 1
 
-        ma = ma.astype(np.uint8)
-        ma[y_inds,x_inds] = 2
+          ma = ma.astype(np.uint8)
+          ma[y_inds,x_inds] = 2
 
-        return ma
+          return ma
 
-      def checkerboard_mask():
-        ma = np.indices(patch_size).transpose((1,2,0))
-        ma = np.floor(ma/(1,256)).sum(-1) %2==0
-        ma = 2*ma
-        if e%2==1: ma = 2-ma
-        return ma
+        def checkerboard_mask():
+          ma = np.indices(patch_size).transpose((1,2,0))
+          ma = np.floor(ma/(1,256)).sum(-1) %2==0
+          ma = 2*ma
+          if e%2==1: ma = 2-ma
+          return ma
 
-      ma = sparse_3set_mask()
+        ma = sparse_3set_mask()
+
       # ipdb.set_trace()
       # return ma
 
-      ## apply mask to input
-      w1[:,:] = torch.from_numpy(ma.astype(np.float)).cuda()
-      x1_damaged = x1.clone()
-      x1_damaged[w1>0] = torch.rand(x1.shape).cuda()[w1>0]
+      if False:
+        ## apply mask to input
+        w1[:,:] = torch.from_numpy(ma.astype(np.float)).cuda()
+        x1_damaged = x1.clone()
+        x1_damaged[w1>0] = torch.rand(x1.shape).cuda()[w1>0]
 
-      y1p = d.net(x1_damaged)
+      x1  = x1.reshape(-1,1,256,256)
+      y1p = d.net(x1)
+      x1  = x1.reshape(-1,4,4,256,256)
+      y1p = y1p.reshape(-1,4,4,256,256)
 
-      dims = (1,2,3) ## all dims except batch
+      dims = (1,2,3,4) ## all dims except batch
 
       if False:
+        ## add smoothness prior to loss
         dx = 0.15*torch.abs(y1p[:,:,:,1:] - y1p[:,:,:,:-1])
         dy = 0.15*torch.abs(y1p[:,:,1:] - y1p[:,:,:-1])
         dy = 0.25*torch.abs(y1p[:,:,:,1:] - y1p[:,:,:,:-1])
@@ -342,9 +322,13 @@ def train(d,ta=None,end_epoch=301,mask_shape=[1,2,3,4]):
         resid = torch.abs(y1p-x1)**2
         loss_per_patch = resid.mean(dims) + dx.mean(dims) #+ dy.mean(dims) + dz.mean(dims) #+ potential.mean(dims)
       
-      tm = (w1==2).float() ## target mask
-      loss_per_patch = (tm * torch.abs(y1p-x1)**2).sum(dims) / tm.sum(dims) # + dx.mean(dims) + dy.mean(dims) #+ dz.mean(dims)
-      # ipdb.set_trace()
+      if False:
+        ## old self-supervised, masked loss
+        tm = (w1==2).float() ## target mask
+        loss_per_patch = (tm * torch.abs(y1p-x1)**2).sum(dims) / tm.sum(dims) # + dx.mean(dims) + dy.mean(dims) #+ dz.mean(dims)
+        # ipdb.set_trace()
+
+      loss_per_patch = ((y1p-d.ys)**2).mean(dims)
 
       # loss_per_patch = (w1 * torch.abs(y1p-y1t)).sum(dims) / w1.sum(dims) #+ 1e-3*(y1p.mean(dims)).abs()
       # loss_per_patch = (w1 * -(y1t*torch.log(y1p + 1e-7) + (1-y1t)*torch.log((1-y1p) + 1e-7))).sum(dims) / w1.sum(dims) #+ 1e-2*(y1p.mean(dims)).abs()
@@ -356,47 +340,47 @@ def train(d,ta=None,end_epoch=301,mask_shape=[1,2,3,4]):
       loss.backward()
       opt.step()
 
-    ## predict on examples and save predictions as images
-    with torch.no_grad():
-      example_yp = d.net(example_xs)
-      # xs_fft = xs_fft/xs_fft.max()
-      yp_fft = torch.fft((example_yp - example_yp.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1) #.cpu().detach().numpy()
-      yp_fft = torch.from_numpy(np.fft.fftshift(yp_fft.cpu(),axes=(-1,-2))).cuda()
-      # yp_fft = yp_fft/yp_fft.max()
+    ## predict on examples and save each epoch
+    if False:
+      with torch.no_grad():
+        example_yp = d.net(example_xs)
+        # xs_fft = xs_fft/xs_fft.max()
+        yp_fft = torch.fft((example_yp - example_yp.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1) #.cpu().detach().numpy()
+        yp_fft = torch.from_numpy(np.fft.fftshift(yp_fft.cpu(),axes=(-1,-2))).cuda()
+        # yp_fft = yp_fft/yp_fft.max()
 
-      rgb = torch.stack([example_xs,w1[[0]*len(example_xs)]/2,xs_fft,example_yp,yp_fft],0).cpu().detach().numpy()
-      arr = rgb.copy()
-      # type,samples,channels,y,x
-      rgb = normalize3(rgb,axs=(1,2,3,4))
-      rgb[[2,4]] = normalize3(rgb[[2,4]],pmin=0,pmax=99.0,axs=(1,2,3,4))
-      # return rgb
-      # remove channels and permute
-      rgb = collapse2(rgb[:,:,0],'tsyx','sy,tx')
-      # arr = collapse2(arr[:,:,0],'tsyx','sy,tx')
+        rgb = torch.stack([example_xs,w1[[0]*len(example_xs)]/2,xs_fft,example_yp,yp_fft],0).cpu().detach().numpy()
+        arr = rgb.copy()
+        # type,samples,channels,y,x
+        rgb = normalize3(rgb,axs=(1,2,3,4))
+        rgb[[2,4]] = normalize3(rgb[[2,4]],pmin=0,pmax=99.0,axs=(1,2,3,4))
+        # return rgb
+        # remove channels and permute
+        rgb = collapse2(rgb[:,:,0],'tsyx','sy,tx')
+        # arr = collapse2(arr[:,:,0],'tsyx','sy,tx')
 
-      with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        if e%10==0:  io.imsave(d.savedir / f'epochs/rgb_{e:03d}.png', rgb)
-        if e%100==0: np.save(d.savedir / f'epochs_npy/arr_{e:03d}.npy', arr)
+        with warnings.catch_warnings():
+          warnings.simplefilter("ignore")
+          if e%10==0:  io.imsave(d.savedir / f'epochs/rgb_{e:03d}.png', rgb)
+          if e%100==0: np.save(d.savedir / f'epochs_npy/arr_{e:03d}.npy', arr)
 
-    ## plot the loss after each epoch
-    ta.lossdists.append(lossdist.numpy().copy())
-    batches_per_epoch = ceil(d.x1_all.shape[0]/batch_size)
-    x_axis = np.arange(len(ta.losses)) / batches_per_epoch
+    ## plot loss 
+    batches_per_epoch = ceil(d.xs.shape[0]/batch_size)
+    epochs = np.arange(len(ta.losses)) / batches_per_epoch
     plt.clf()
-    plt.plot(x_axis,ta.losses)
+    plt.plot(epochs,ta.losses)
     # plt.ylim(np.mean(ta.losses)-3*np.std(ta.losses),np.mean(ta.losses)+3*np.std(ta.losses))
     plt.yscale('log')
     plt.xlabel(f'1 epoch = {batches_per_epoch} batches')
     plt.savefig(d.savedir/f'loss.png',dpi=300)
-
-    ## and save the model state
-    if e%10==0:
-      torch.save(d.net.state_dict(), d.savedir/f'models/net{e:03d}.pt')
+    if e%100==0:
+      torch.save(d.net.state_dict(), savedir/f'models/net{e:03d}.pt')
 
   pklsave(ta.losses,d.savedir/f'losses.pkl')
   torch.save(d.net.state_dict(), d.savedir/f'models/net{ta.e:03d}.pt')
   return ta
+
+## 
 
 def multitrain(d):
 
@@ -425,6 +409,44 @@ def multitrain(d):
   plt.yscale('log')
   plt.savefig(savedir/'multi_losses.png',dpi=300)
 
+## shared plotting
+
+def plot_losses(d,ta):
+  
+  ## plot simple loss trajectory
+
+  plt.figure()
+  plt.plot(ta.losses)
+  plt.ylim(0,ta.losses[0])
+  plt.savefig(d.savedir/'loss.pdf')
+
+  ## plot loss distribution trajectories
+
+  lds = ta.lossdists[1::3]
+  N   = len(lds)
+  colors = color.pastel_colors_RGB(N,max_saturation=0.9,brightness=0.8,shuffle=False)
+  # colors = np.arange(N)[:,None][:,[0,0,0]] * (15,-15,15) + (15,240,15)
+  # colors = colors/255
+  plt.figure()
+  for i in np.arange(N):
+    plt.plot(sorted(lds[i]),'.',color=colors[i]+[0.25])
+  # plt.ylim(0,np.max(lds))
+  # plt.scatter(np.r_[0:N],np.ones(N)*1,c=colors)
+  plt.savefig(savedir / 'lossdist.pdf')
+  plt.figure()
+  for i in np.arange(N):
+    plt.plot(lds[i],'.',color=colors[i]+[0.25])
+  # plt.scatter(np.r_[0:N],np.ones(N)*1,c=colors)
+  plt.savefig(d.savedir / 'lossdist_unsorted.pdf')
+
+def histograms():
+  "cumulative dist of pixel values in img and pimg"
+  plt.figure()
+  x = np.linspace(0,100,100)
+  plt.plot(x,np.percentile(img,x),label='img')
+  plt.plot(x,np.percentile(pimg,x),label='pimg')
+  plt.legend()
+  plt.savefig(savedir/'histogram_img_pimg.pdf')
 
 if __name__=='__main__':
   print("Training...")
@@ -435,10 +457,10 @@ if __name__=='__main__':
   # analysis({'net':net})
   # train()
 
-  # d = setup()
+  # d  = setup()
   # ta = train(d,end_epoch=1001)
 
-  predict_on_full_flower_for_all_e01_models()
+  # predict_on_full_flower_for_all_e01_models()
 
   # e01_fig2_flower()
   # d = SimpleNamespace()
@@ -449,29 +471,9 @@ if __name__=='__main__':
   # plot_losses(d,ta)
   # predict_on_full_flower(d)
 
-
 info = """
 
-How to use this script
-======================
-
-```python
-import n2v2_flower as fl
-
-rawdata = '/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif'
-savedir = '/lustre/projects/project-broaddus/denoise_experiments/flower/e01/flower_test'
-dat = fl.setup_flower_shutter(rawdata,savedir);
-ta = fl.train(dat,end_epoch=101,mask_shape=[1,2,3,4])
-```
-
-[dat]         
-dat.net      # the network
-dat.x1_all   # training data
-dat.savedir  # where the model weights and training artifacts are saved
-
-[ta]         # training artifacts
-ta.e         # the number of the current epoch
-ta.losses    # loss after each _batch_
-ta.lossdists # a list containing loss for each sample for each epoch
+Mon Sep 23
+copied from n2v2_flower.py
 
 """

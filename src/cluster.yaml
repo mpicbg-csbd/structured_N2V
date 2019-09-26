@@ -2,12 +2,16 @@ __default__:
   # J: "normjob"
   time: "12:00:00"
   mem:  "128000"
-  p:    "batch"
-  gres: "gpu:0"
-  n: 1
-  c: 1
-
-two:
-  # J: "two"
-  p: "gpu"
+  p:    "gpu"
   gres: "gpu:1"
+  n: "1"
+  c: "1"
+
+# two:
+#   # J: "two"
+#   p: "gpu"
+#   gres: "gpu:1"
+
+# pred_flower_nlm:
+#   p: "gpu"
+#   gres: "gpu:1"

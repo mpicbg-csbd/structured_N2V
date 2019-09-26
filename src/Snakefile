@@ -1,54 +1,85 @@
 ## invoke with:
-## snakemake -j 10 --cluster-config cluster.yaml --cluster "sbatch -J {rule} -p {cluster.p} --gres {cluster.gres} " three
+## alias csnake='snakemake -j 10 --cluster-config cluster.yaml --cluster "sbatch -J {rule} -p {cluster.p} --gres {cluster.gres} "'
+## (that's now in bashrc. e.g. usage below)
+## csnake train_flower_n2gt
 
-localrules: three
+localrules: analysis, bm3d_flower
 
-rule one:
+## flower rules
+
+flowerdata = '/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif'
+flowerdir  = '/lustre/projects/project-broaddus/denoise_experiments/flower/e01/'
+
+rule flower_n2v2_single:
+  output: flowerdir + 'flxx_{n}/'
+  run:
+    print(output[0], int(wildcards.n))
+    # import n2v2_flower, predict
+    # d = n2v2_flower.setup_flower_shutter(flowerdata,output[0])
+    # ta = n2v2_flower.train(d,end_epoch=11,mask_shape=range(int(n)))
+    # predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net_600.pt')
+
+rule flower_n2v2:
+  input: [flowerdir + f'flxx_{n}/' for n in range(9)]
+
+rule flower_n2gt:
+  run:
+    import n2gt_2d, predict
+    d  = n2gt_2d.setup()
+    ta = n2gt_2d.train(d,end_epoch=601)
+    predict.predict_flower_n2gt()
+
+rule flower_nlm:
+  output: flowerdir + 'nlm/'
+  run:
+    import nlm_comparison
+    nlm_comparison.nlm2d(flowerdata, output[0], sigma=0.1)
+
+rule bm3d_flower:
+  input:  "/projects/project-broaddus/rawdata/artifacts/flower.tif"
+  output: "/projects/project-broaddus/denoise_experiments/flower/e01/bm3d/"
+  run:
+    from tifffile import imread,imsave
+    from segtools.numpy_utils import normalize3
+    from pathlib import Path
+    from subprocess import run
+    
+    img = imread(input[0])
+    img = normalize3(img,2,99.6)
+    
+    bm3d="/projects/project-broaddus/comparison_methods/bm3d/build/bm3d"
+    
+    tmpdir = Path("/projects/project-broaddus/denoise_experiments/data/flower_split_normed/")
+    outdir = Path(output[0]); outdir.mkdir(exist_ok=True,parents=True)
+    
+    for i in range(100):
+      tmpname = str(tmpdir / f"img{i:03d}.tif")
+      outname = str(outdir / f"img{i:03d}.tif")
+
+      imsave(tmpname, img[i])
+      run(f"{bm3d} {tmpname} 0.1 {outname}",shell=True)
+
+## shutter rules
+
+shutterdata = '/lustre/projects/project-broaddus/rawdata/artifacts/shutterclosed.tif'
+shutterdir  = '/lustre/projects/project-broaddus/denoise_experiments/shutter/e01/'
+
+rule shutter_nlm:
+  output: shutterdir + 'nlm/'
+  run:
+    import nlm_comparison
+    nlm_comparison.nlm2d(flowerdata, output[0], sigma=0.1)
+
+
+
+rule analysis:
   input:
-    "torch_models.py"
   output:
-    "out1.txt",
-    # "out2.txt"
-  shell:
-    """
-    time {{
-      echo "real run number 1" > out1.txt
-      sleep 20s
-    }}
-    """
+  run:
+    import analysis
+    import numpy as np
+    dat = analysis.fulldata_fullpatch()
+    analysis.print_metrics_fullpatch(dat)
 
-rule two:
-  input:
-    # "torch_models.py"
-  output:
-    "out2.txt",
-    # "out2.txt"
-  shell:
-    """
-    time {{
-      echo "this is a 2nd, independent job" > out2.txt
-      sleep 15s
-    }}
-    """
 
-rule three:
-  input:
-    "out1.txt", "out2.txt"
-  output:
-    "out3.txt",
-    # "out2.txt"
-  shell:
-    """
-    time {{
-      cat out1.txt > out3.txt
-      cat out2.txt >> out3.txt
-      sleep 10s
-    }}
-    """
 
-rule clean:
-  shell:
-    """
-    rm out*.txt
-    rm slurm-*.out
-    """

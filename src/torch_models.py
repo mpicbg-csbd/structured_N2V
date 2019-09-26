@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from torchsummary import summary
 
-
+@DeprecationWarning
 def conv_many(*cs):
   N = len(cs)-1
   convs = [nn.Conv3d(cs[i],cs[i+1],(3,5,5),padding=(1,2,2)) for i in range(N)]
@@ -13,6 +13,8 @@ def conv_many(*cs):
   res[::2] = convs
   res[1::2] = relus
   return nn.Sequential(*res)
+
+## 3d nets
 
 def conv2(c0,c1,c2):
   return nn.Sequential(
@@ -111,6 +113,7 @@ class Unet3(nn.Module):
 
     return out1
 
+## 2d nets
 
 def conv2_2d(c0,c1,c2):
   return nn.Sequential(
@@ -123,7 +126,6 @@ def conv2_2d(c0,c1,c2):
     nn.ReLU(),
     # nn.Dropout3d(p=0.1),
     )
-
 
 class Unet2_2d(nn.Module):
   """
@@ -158,7 +160,7 @@ class Unet2_2d(nn.Module):
     c2 = nn.MaxPool2d((2,2))(c1)
     c2 = self.l_cd(c2)
     c3 = nn.MaxPool2d((2,2))(c2)
-    c3 = self.l_ef(c3)
+    c3 = self.l_ef(c3)  ## bottom, central layer
 
     c3 = F.interpolate(c3,scale_factor=(2,2))
     c3 = torch.cat([c3,c2],1)
@@ -170,6 +172,7 @@ class Unet2_2d(nn.Module):
 
     return out1
 
+## resnets are incomplete
 
 def conv_res(c0,c1,c2):
   return nn.Sequential(
