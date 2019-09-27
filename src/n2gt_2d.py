@@ -46,8 +46,7 @@ import torch_models
 # time python3 $flowerdir/n2gt_2d.py &
 # """
 
-experiments_dir = Path('/lustre/projects/project-broaddus/denoise_experiments/').resolve()
-savedir = Path(experiments_dir/'flower/e01/n2gt').resolve() #/flower3_9/')
+# savedir = Path(experiments_dir/'flower/e01/n2gt').resolve() #/flower3_9/')
 
 ## lightweight funcs and utils
 
@@ -184,65 +183,64 @@ def datagen(savedir=None):
 
   return dg
 
-def setup(params={}):
+def setup(savedir):
 
+  savedir = Path(savedir)
   wipe_dirs(savedir)
   init_dirs(savedir)
 
-  # dg = datagen(savedir=savedir)
-  # data = dg.data
-  # data = np.load('/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/data_shutter.npz')['data']
-  # data = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e01/data_flower3.npz')['data']
   data = imread('/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif')
   data = normalize3(data,2,99.6) ## normalize across all dims?
-  # data = np.load('/lustre/projects/project-broaddus/denoise_experiments/flower/e02/data_flower.npz')['data']
 
   d = SimpleNamespace()
   d.net = torch_models.Unet2_2d(16,[[1],[1]],finallayer=nn.ReLU)
   d.net.load_state_dict(torch.load('/lustre/projects/project-broaddus/denoise_experiments/flower/models/net_randinit.pt'))
 
-  d.net.apply(init_weights);
+  # d.net.apply(init_weights);
   d.savedir = savedir
 
-  # d.net.load_state_dict(torch.load('/lustre/projects/project-broaddus/devseg_data/cl_datagen/d000/jj000/net250.pt'))
-  # torch.save(d.net.state_dict(), '/lustre/projects/project-broaddus/devseg_data/cl_datagen/rsrc/net_random_init_unet2.pt')
-
-  d.xs  = torch.from_numpy(data).float()
-  d.xs = d.xs.reshape((100,4,256,4,256,1)).permute((0,1,3,5,2,4)) #.reshape((-1,256,256))
+  d.xs = torch.from_numpy(data).float()
+  d.xs = d.xs.reshape(100,4,256,4,256,1).permute(0,1,3,5,2,4) #.reshape((-1,256,256))
   d.ys = d.xs.mean(0)
+
+  io.imsave(savedir / 'xs.png', collapse2(d.xs[0,:,:,0].numpy(),"12yx","1y,2x"))
+  io.imsave(savedir / 'ys.png', collapse2(d.ys[:,:,0].numpy(),"12yx","1y,2x"))
+  d.cuda = False
 
   return d
 
-def train(d,ta=None,end_epoch=301):
+def train(d,ta=None,end_epoch=300,already_on_cuda=False):
   if ta is None: ta = init_training_artifacts()
 
   ## setup const variables necessary for training
   batch_size = 4
-  inds = np.arange(0,d.xs.shape[0])
+  inds       = np.arange(0,d.xs.shape[0])
   patch_size = d.xs.shape[4:]
   # xs = d.xs.reshape((100,4,256,4,256)).permute((0,1,3,2,4)) #.reshape((-1,256,256))
   # ys = d.xs.mean(0).reshape((4,256,4,256)).permute((0,2,1,3))
-  # ws = torch.ones(d.xs.shape).float()
+  d.ws = torch.ones(d.xs.shape).float()
 
   ## set up variables for monitoring training
-  # example_xs = d.xs[inds[::floor(np.sqrt(len(inds)))]].clone()
-  example_xs = d.xs[[0,3,5,12]].reshape((-1,1,256,256)).clone()
-  xs_fft = torch.fft((example_xs-example_xs.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1)
-  xs_fft = torch.from_numpy(np.fft.fftshift(xs_fft,axes=(-1,-2)))
-  lossdist = torch.zeros(d.xs.shape[0]) - 2
+  # d.example_xs = d.xs[inds[::floor(np.sqrt(len(inds)))]].clone()
+  d.example_xs = d.xs[[0,3,5,12],0,0].reshape(-1,1,256,256).clone().cpu()
+  d.xs_fft     = torch.fft((d.example_xs-d.example_xs.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1)
+  d.xs_fft     = torch.from_numpy(np.fft.fftshift(d.xs_fft,axes=(-1,-2)))
+  lossdist   = torch.zeros(d.xs.shape[0]) - 2
 
   ## move vars to gpu
-  d.net = d.net.cuda()
-  d.xs  = d.xs.cuda()
-  d.ys  = d.ys.cuda()
-  xs_fft = xs_fft.cuda()
-  example_xs = example_xs.cuda()
+  # if d.cuda is False:
+  d.net  = d.net.cuda()
+  d.xs   = d.xs.cuda()
+  d.ys   = d.ys.cuda()
+  d.xs_fft = d.xs_fft.cuda()
+  d.example_xs = d.example_xs.cuda()
+  d.ws = d.ws.cuda()
 
   ## initialize optimizer (must be done after moving data to gpu ?)
-  opt = torch.optim.Adam(d.net.parameters(), lr = 2e-5)
+  opt = torch.optim.Adam(d.net.parameters(), lr = 2e-4)
 
   plt.figure()
-  for e in range(ta.e,end_epoch):
+  for e in range(ta.e,end_epoch+1):
     ta.e = e
     np.random.shuffle(inds)
     ta.lossdists.append(lossdist.numpy().copy())
@@ -252,82 +250,20 @@ def train(d,ta=None,end_epoch=301):
     for b in range(ceil(d.xs.shape[0]/batch_size)):
       idxs = inds[b*batch_size:(b+1)*batch_size]
       x1   = d.xs[idxs]
-      # w1   = d.ws[idxs]
+      w1   = d.ws[idxs]
       # y1   = d.ys[idxs]
-
-      if False:
-        def random_pixel_mask():
-          n = int(np.prod(patch_size) * 0.02)
-          x_inds = np.random.randint(0,patch_size[1],n)
-          y_inds = np.random.randint(0,patch_size[0],n)
-          # z_inds = np.random.randint(0,32,64*64*1)
-          ma = np.zeros(patch_size)
-          ma[y_inds,x_inds] = 2
-          return ma
-        
-        def sparse_3set_mask():
-          "build random mask for small number of central pixels"
-          n = int(np.prod(patch_size) * 0.02)
-          x_inds = np.random.randint(0,patch_size[1],n)
-          y_inds = np.random.randint(0,patch_size[0],n)
-          ma = np.zeros(patch_size)
-
-          # ma = binary_dilation(ma)
-
-          for i in [1,2,3,4,5,6,7]:
-            m = x_inds-i >= 0;            ma[y_inds[m],x_inds[m]-i] = 1
-            m = x_inds+i < patch_size[1]; ma[y_inds[m],x_inds[m]+i] = 1
-          # for i in [1]:
-          #   m = y_inds-i >= 0;            ma[y_inds[m]-i,x_inds[m]] = 1
-          #   m = y_inds+i < patch_size[0]; ma[y_inds[m]+i,x_inds[m]] = 1
-
-          ma = ma.astype(np.uint8)
-          ma[y_inds,x_inds] = 2
-
-          return ma
-
-        def checkerboard_mask():
-          ma = np.indices(patch_size).transpose((1,2,0))
-          ma = np.floor(ma/(1,256)).sum(-1) %2==0
-          ma = 2*ma
-          if e%2==1: ma = 2-ma
-          return ma
-
-        ma = sparse_3set_mask()
-
-      # ipdb.set_trace()
-      # return ma
-
-      if False:
-        ## apply mask to input
-        w1[:,:] = torch.from_numpy(ma.astype(np.float)).cuda()
-        x1_damaged = x1.clone()
-        x1_damaged[w1>0] = torch.rand(x1.shape).cuda()[w1>0]
 
       x1  = x1.reshape(-1,1,256,256)
       y1p = d.net(x1)
-      x1  = x1.reshape(-1,4,4,256,256)
-      y1p = y1p.reshape(-1,4,4,256,256)
+      # x1  = x1.reshape(-1,4,4,256,256)
+      # y1p = y1p.reshape(-1,4,4,256,256)
+      y1p = y1p.reshape(4,4,4,1,256,256)
 
-      dims = (1,2,3,4) ## all dims except batch
+      # ipdb.set_trace()
 
-      if False:
-        ## add smoothness prior to loss
-        dx = 0.15*torch.abs(y1p[:,:,:,1:] - y1p[:,:,:,:-1])
-        dy = 0.15*torch.abs(y1p[:,:,1:] - y1p[:,:,:-1])
-        dy = 0.25*torch.abs(y1p[:,:,:,1:] - y1p[:,:,:,:-1])
-        dz = 0.05*torch.abs(y1p[:,:,1:] - y1p[:,:,:-1])
-        c0,c1,c2 = 0.0, 0.15, 1.0
-        potential = 2e2 * ((y1p-c0)**2 * (y1p-c2)**2) ## rough locations for three classes
-        resid = torch.abs(y1p-x1)**2
-        loss_per_patch = resid.mean(dims) + dx.mean(dims) #+ dy.mean(dims) + dz.mean(dims) #+ potential.mean(dims)
-      
-      if False:
-        ## old self-supervised, masked loss
-        tm = (w1==2).float() ## target mask
-        loss_per_patch = (tm * torch.abs(y1p-x1)**2).sum(dims) / tm.sum(dims) # + dx.mean(dims) + dy.mean(dims) #+ dz.mean(dims)
-        # ipdb.set_trace()
+      dims = (1,2,3,4,5) ## all dims except batch
 
+      # ipdb.set_trace()
       loss_per_patch = ((y1p-d.ys)**2).mean(dims)
 
       # loss_per_patch = (w1 * torch.abs(y1p-y1t)).sum(dims) / w1.sum(dims) #+ 1e-3*(y1p.mean(dims)).abs()
@@ -341,23 +277,25 @@ def train(d,ta=None,end_epoch=301):
       opt.step()
 
     ## predict on examples and save each epoch
-    if False:
+    if e%10==0:
       with torch.no_grad():
-        example_yp = d.net(example_xs)
-        # xs_fft = xs_fft/xs_fft.max()
-        yp_fft = torch.fft((example_yp - example_yp.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1) #.cpu().detach().numpy()
-        yp_fft = torch.from_numpy(np.fft.fftshift(yp_fft.cpu(),axes=(-1,-2))).cuda()
-        # yp_fft = yp_fft/yp_fft.max()
+        example_yp = d.net(d.example_xs)
 
-        rgb = torch.stack([example_xs,w1[[0]*len(example_xs)]/2,xs_fft,example_yp,yp_fft],0).cpu().detach().numpy()
+        ## compute fft from predictions
+        yp_fft = torch.fft((example_yp - example_yp.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1) #.cpu().detach().numpy()
+        ## shift frequency domain s.t. zer freq is at center of array
+        yp_fft = torch.from_numpy(np.fft.fftshift(yp_fft.cpu(),axes=(-1,-2))).cuda()
+
+        ## stack (real space, -weights-, real fft, predictions, and prediction fft) along a new dimension
+        rgb = torch.stack([d.example_xs, d.xs_fft, example_yp, yp_fft],0).cpu().detach().numpy()
         arr = rgb.copy()
-        # type,samples,channels,y,x
-        rgb = normalize3(rgb,axs=(1,2,3,4))
-        rgb[[2,4]] = normalize3(rgb[[2,4]],pmin=0,pmax=99.0,axs=(1,2,3,4))
-        # return rgb
-        # remove channels and permute
+        ## first normalize each type to [0,1] independently
+        rgb = normalize3(rgb,axs=(1,2,3,4)) # dims=type,samples,channels,y,x
+        ## then normalize fft's and real-space dims separately 
+        rgb[[1,3]] = normalize3(rgb[[1,3]],pmin=0,pmax=99.0,axs=(1,2,3,4))
+
+        ## remove channels and permute into a 2D image
         rgb = collapse2(rgb[:,:,0],'tsyx','sy,tx')
-        # arr = collapse2(arr[:,:,0],'tsyx','sy,tx')
 
         with warnings.catch_warnings():
           warnings.simplefilter("ignore")
@@ -373,8 +311,10 @@ def train(d,ta=None,end_epoch=301):
     plt.yscale('log')
     plt.xlabel(f'1 epoch = {batches_per_epoch} batches')
     plt.savefig(d.savedir/f'loss.png',dpi=300)
+    
+    ## save model weights
     if e%100==0:
-      torch.save(d.net.state_dict(), savedir/f'models/net{e:03d}.pt')
+      torch.save(d.net.state_dict(), d.savedir/f'models/net{e:03d}.pt')
 
   pklsave(ta.losses,d.savedir/f'losses.pkl')
   torch.save(d.net.state_dict(), d.savedir/f'models/net{ta.e:03d}.pt')

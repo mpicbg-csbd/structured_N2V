@@ -120,22 +120,6 @@ def predict_on_full_flower_for_all_e01_models():
     # pimg = apply_net_tiled(net,img[:,None])
     imsave(pimg, savedir/f'pred_flower.tif')
 
-def predict_flower_n2gt():
-  dir = "n2gt"
-  savedir = denoise_experiments / f'flower/e01/{dir}/'
-  savedir.mkdir(exist_ok=True,parents=True)
-  net  = torch_models.Unet2_2d(16,[[1],[1]],finallayer=nn.ReLU).cuda()
-  net.load_state_dict(torch.load(denoise_experiments / f'flower/e01/{dir}/models/net599.pt'))
-  img  = imread(rawdata_dir / 'artifacts/flower.tif')
-  pmin, pmax = 2, 99.6
-  img  = normalize3(img,pmin,pmax,axs=(1,2)).astype(np.float32,copy=False)
-  pimg = []
-  for x in img:
-    x = apply_net_tiled_2d(net,x[None])
-    pimg.append(x)
-  pimg = np.array(pimg)
-  imsave(pimg, savedir/f'pred_flower.tif')
-
 ## shutter
 
 def predict_on_full_2d_stack(rawdata,

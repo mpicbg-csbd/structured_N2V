@@ -37,6 +37,7 @@ rawdata_dir     = Path('/projects/project-broaddus/rawdata').resolve()
 
 ## load data
 
+
 def eval_01():
   data = np.load(experiments_dir/'flower/e01/e01_fig2_flower.npz')['rgb']
   names = [
@@ -181,10 +182,6 @@ def fulldata2():
   dat = SimpleNamespace(gt=flower_gt_patches,e01=e01,e02=e02)
   return dat
 
-
-
-
-
 def fulldata_fullpatch():
   ## load the flower dataset and build the GT
   flower_all = imread(rawdata_dir/'artifacts/flower.tif')
@@ -278,9 +275,6 @@ def fulldata_fullpatch():
 
   dat = SimpleNamespace(gt=flower_gt,e01=e01,all=flower_all) #e02=e02)
   return dat
-
-
-
 
 @DeprecationWarning
 def e01_fig2_flower():
@@ -390,7 +384,6 @@ def e02_fig2_flower():
 
   np.savez_compressed(savedir.parent / 'e02_fig2_flower.npz', rgb=rgb)
   return rgb
-
 
 ## perform analysis
 

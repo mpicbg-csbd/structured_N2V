@@ -245,33 +245,33 @@ def setup_flower_shutter(rawdata='/lustre/projects/project-broaddus/rawdata/arti
   d.x1_all  = torch.from_numpy(data).float()
   return d
 
-def train(d,ta=None,end_epoch=301,mask_shape=[1,2,3,4]):
+def train(d,ta=None,end_epoch=300,mask_shape=[1,2,3,4]):
   if ta is None: ta = init_training_artifacts()
 
   ## set up const variables necessary for training
   batch_size = 4
   inds = np.arange(0,d.x1_all.shape[0])
   patch_size = d.x1_all.shape[2:]
-  w1_all = torch.ones(d.x1_all.shape).float()
+  d.w1_all = torch.ones(d.x1_all.shape).float()
 
   ## set up variables for monitoring training
-  # example_xs = d.x1_all[inds[::floor(np.sqrt(len(inds)))]].clone()
-  example_xs = d.x1_all[[0,3,5,12]].clone()
-  xs_fft = torch.fft((example_xs-example_xs.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1)
-  xs_fft = torch.from_numpy(np.fft.fftshift(xs_fft,axes=(-1,-2)))
+  # d.eg_xs = d.x1_all[inds[::floor(np.sqrt(len(inds)))]].clone()
+  d.eg_xs  = d.x1_all[[0,3,5,12]].clone()
+  d.xs_fft = torch.fft((d.eg_xs-d.eg_xs.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1)
+  d.xs_fft = torch.from_numpy(np.fft.fftshift(d.xs_fft,axes=(-1,-2)))
   lossdist = torch.zeros(d.x1_all.shape[0]) - 2
 
   ## move everything to cuda
-  d.net = d.net.cuda()
+  d.net    = d.net.cuda()
   d.x1_all = d.x1_all.cuda()
-  w1_all = w1_all.cuda()
-  xs_fft = xs_fft.cuda()
-  example_xs = example_xs.cuda()
+  d.w1_all = d.w1_all.cuda()
+  d.xs_fft = d.xs_fft.cuda()
+  d.eg_xs  = d.eg_xs.cuda()
 
   opt = torch.optim.Adam(d.net.parameters(), lr = 2e-5)
 
   plt.figure()
-  for e in range(ta.e,end_epoch):
+  for e in range(ta.e,end_epoch+1):
     ta.e = e
     np.random.shuffle(inds)
     lossdist[...] = -1
@@ -280,7 +280,7 @@ def train(d,ta=None,end_epoch=301,mask_shape=[1,2,3,4]):
     for b in range(ceil(d.x1_all.shape[0]/batch_size)):
       idxs = inds[b*batch_size:(b+1)*batch_size]
       x1   = d.x1_all[idxs] #.cuda()
-      w1   = w1_all[idxs] #.cuda()
+      w1   = d.w1_all[idxs] #.cuda()
 
       def random_pixel_mask():
         n = int(np.prod(patch_size) * 0.02)
@@ -358,13 +358,13 @@ def train(d,ta=None,end_epoch=301,mask_shape=[1,2,3,4]):
 
     ## predict on examples and save predictions as images
     with torch.no_grad():
-      example_yp = d.net(example_xs)
-      # xs_fft = xs_fft/xs_fft.max()
+      example_yp = d.net(d.eg_xs)
+      # d.xs_fft = d.xs_fft/d.xs_fft.max()
       yp_fft = torch.fft((example_yp - example_yp.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1) #.cpu().detach().numpy()
       yp_fft = torch.from_numpy(np.fft.fftshift(yp_fft.cpu(),axes=(-1,-2))).cuda()
       # yp_fft = yp_fft/yp_fft.max()
 
-      rgb = torch.stack([example_xs,w1[[0]*len(example_xs)]/2,xs_fft,example_yp,yp_fft],0).cpu().detach().numpy()
+      rgb = torch.stack([d.eg_xs,w1[[0]*len(d.eg_xs)]/2,d.xs_fft,example_yp,yp_fft],0).cpu().detach().numpy()
       arr = rgb.copy()
       # type,samples,channels,y,x
       rgb = normalize3(rgb,axs=(1,2,3,4))

@@ -11,23 +11,24 @@ flowerdata = '/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif'
 flowerdir  = '/lustre/projects/project-broaddus/denoise_experiments/flower/e01/'
 
 rule flower_n2v2_single:
-  output: flowerdir + 'flxx_{n}/'
+  output: flowerdir + 'mask{n}/'
   run:
-    print(output[0], int(wildcards.n))
-    # import n2v2_flower, predict
-    # d = n2v2_flower.setup_flower_shutter(flowerdata,output[0])
-    # ta = n2v2_flower.train(d,end_epoch=11,mask_shape=range(int(n)))
-    # predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net_600.pt')
+    import n2v2_flower, predict
+    d = n2v2_flower.setup_flower_shutter(flowerdata,output[0])
+    ta = n2v2_flower.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
+    predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net_600.pt')
 
-rule flower_n2v2:
-  input: [flowerdir + f'flxx_{n}/' for n in range(9)]
+rule flower_n2v2_all:
+  input: [flowerdir + f'mask{n:02d}/' for n in range(9)]
 
 rule flower_n2gt:
+  output: "/lustre/projects/project-broaddus/denoise_experiments/flower/e01/n2gt2/"
   run:
     import n2gt_2d, predict
-    d  = n2gt_2d.setup()
-    ta = n2gt_2d.train(d,end_epoch=601)
-    predict.predict_flower_n2gt()
+    d  = n2gt_2d.setup(output[0])
+    ta = n2gt_2d.init_training_artifacts()
+    n2gt_2d.train(d,ta,end_epoch=600);
+    predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net600.pt')
 
 rule flower_nlm:
   output: flowerdir + 'nlm/'
@@ -59,6 +60,14 @@ rule bm3d_flower:
       imsave(tmpname, img[i])
       run(f"{bm3d} {tmpname} 0.1 {outname}",shell=True)
 
+rule flower_table:
+  output: '/lustre/projects/project-broaddus/denoise_experiments/flower/e01/metrics.csv'
+  run:
+    import analysis2
+    ## WARNING: input files are hardcoded
+    dat = analysis2.fulldata_fullpatch()
+    analysis2.print_metrics_fullpatch(dat,outfile=output[0])
+
 ## shutter rules
 
 shutterdata = '/lustre/projects/project-broaddus/rawdata/artifacts/shutterclosed.tif'
@@ -70,16 +79,15 @@ rule shutter_nlm:
     import nlm_comparison
     nlm_comparison.nlm2d(flowerdata, output[0], sigma=0.1)
 
-
-
 rule analysis:
   input:
-  output:
+  output: "/projects/project-broaddus/denoise_experiments/flower/e01/table.csv",
+          "/projects/project-broaddus/denoise_experiments/flower/e01/table.png",
   run:
-    import analysis
-    import numpy as np
-    dat = analysis.fulldata_fullpatch()
-    analysis.print_metrics_fullpatch(dat)
+    import analysis2
+    dat = analysis2.fulldata_fullpatch()
+    analysis2.print_metrics_fullpatch(dat,outfile=output[0])
+    analysis2.make_visual_table(dat,outfile=output[1])
 
 
 
