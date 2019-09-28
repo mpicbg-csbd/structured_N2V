@@ -183,13 +183,13 @@ def datagen(savedir=None):
 
   return dg
 
-def setup(savedir):
+def setup_flower_shutter(rawdata, savedir):
 
   savedir = Path(savedir)
   wipe_dirs(savedir)
   init_dirs(savedir)
 
-  data = imread('/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif')
+  data = imread(rawdata)
   data = normalize3(data,2,99.6) ## normalize across all dims?
 
   d = SimpleNamespace()

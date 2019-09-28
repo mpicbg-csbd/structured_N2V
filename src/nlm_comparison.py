@@ -2,6 +2,8 @@ import gputools
 import tifffile
 from segtools.numpy_utils import normalize3
 from pathlib import Path
+from subprocess import run
+import numpy as np
 
 def cat(*args,axis=0): return np.concatenate(args, axis)
 def stak(*args,axis=0): return np.stack(args, axis)
@@ -9,7 +11,8 @@ def stak(*args,axis=0): return np.stack(args, axis)
 def imsave(x, name, **kwargs): return tifffile.imsave(str(name), x, **kwargs)
 def imread(name,**kwargs): return tifffile.imread(str(name), **kwargs)
 
-def nlm2d(rawdata, savedir, sigma=0.1, **kwargs):
+
+def nlm_2d(rawdata, savedir, sigma=0.1, **kwargs):
   # dir = "nlm"
   # savedir = denoise_experiments / f'flower/e01/{dir}/'
   savedir = Path(savedir)
@@ -26,3 +29,20 @@ def nlm2d(rawdata, savedir, sigma=0.1, **kwargs):
     pimg.append(x)
   pimg = np.array(pimg)
   imsave(pimg, savedir/f'denoised.tif')
+
+
+def bm3d_2d(rawdata, savedir, sigma=0.1, **kwargs):
+  img = imread(rawdata)
+  img = normalize3(img,2,99.6)
+
+  bm3d = "/projects/project-broaddus/comparison_methods/bm3d/build/bm3d"
+  savedir = Path(savedir); savedir.mkdir(exist_ok=True,parents=True)
+  tmpdir = savedir / 'tmp/'; tmpdir.mkdir(exist_ok=True,parents=True)
+
+  for i in range(100):
+    tmpname = tmpdir  / f"img{i:03d}.tif"
+    outname = savedir / f"img{i:03d}.tif"
+
+    if not tmpname.exists():
+      imsave(img[i], tmpname)
+    run(f"{bm3d} {tmpname} 0.1 {outname}",shell=True)

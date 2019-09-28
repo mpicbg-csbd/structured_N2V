@@ -92,6 +92,7 @@ def load_flower():
   # data = data[perm]
   # names = list(np.array(names)[perm])
 
+  nlm  = imread("/projects/project-broaddus/denoise_experiments/shutter/e01/nlm/denoised.tif")
   bm3d = np.array([imread(x) for x in sorted(glob("/projects/project-broaddus/denoise_experiments/flower/e01/bm3d/*.tif"))])
 
   n2gt = imread("/projects/project-broaddus/denoise_experiments/flower/e01/n2gt2/pred.tif")
@@ -100,6 +101,69 @@ def load_flower():
   e01 = SimpleNamespace(data=data,names=names_e01)
   dat = SimpleNamespace(gt=flower_gt,e01=e01,all=flower_all,bm3d=bm3d,n2gt=n2gt) #e02=e02)
   return dat
+
+def load_shutter():
+  ## load the flower dataset and build the GT
+  raw_all = imread(rawdata_dir/'artifacts/shutterclosed.tif')
+  raw_all = normalize3(raw_all,2,99.6)
+  raw_gt  = raw_all.mean(0)
+  # raw_gt_patches = raw_gt.reshape((4,256,4,256)).transpose((0,2,1,3)).reshape((16,256,256))
+  # raw_gt_patches = raw_gt_patches[[0,3,5,12]]
+
+  ## load the predictions from single-phase models (600th epoch)
+  img0 = imread(experiments_dir / 'shutter/e01/mask00/pred.tif')  # n2v
+  img1 = imread(experiments_dir / 'shutter/e01/mask01/pred.tif')
+  img2 = imread(experiments_dir / 'shutter/e01/mask02/pred.tif')
+  img3 = imread(experiments_dir / 'shutter/e01/mask03/pred.tif')
+  img4 = imread(experiments_dir / 'shutter/e01/mask04/pred.tif')
+  img5 = imread(experiments_dir / 'shutter/e01/mask05/pred.tif')
+  img6 = imread(experiments_dir / 'shutter/e01/mask06/pred.tif')
+  img7 = imread(experiments_dir / 'shutter/e01/mask07/pred.tif')
+  img8 = imread(experiments_dir / 'shutter/e01/mask08/pred.tif')
+
+  names_e01 = [
+    "n2v",
+    "xox",
+    # "plus",
+    # "bigplus",
+    "xxoxx",
+    "xxxoxxx",
+    "xxxxoxxxx",
+    "xxxxxoxxxxx",
+    "xxxxxxoxxxxxx",
+    "xxxxxxxoxxxxxxx",
+    "8xo8x",
+    ]
+
+
+  data = stak(img0, img1, img2, img3, img4, img5, img6, img7, img8,)
+
+  # data[:,[2,4]] = normalize3(np.log(normalize3(data[:,[2,4]],0,99)+1e-7)) ## k-space channels
+  # data[:,[0,3]] = normalize3(data[:,[0,3]]) ## real space channels
+  # data[:,1]     = normalize3(data[:,1]) ## mask channel ?
+
+  ## remove channels dim 
+  data = data[:,:,0]
+
+  ## move raw to front. reshape to ?,4,256,256
+  # data = cat(stak(np.zeros(data[0,0].shape),data[0,0],data[0,2])[None],data[:,[1,3,4]]) 
+
+  ## put the trials in a sensible order
+
+  # perm = [0, 2, 3, 1, 5, 6, 7, 8, 9, 10, 4,]
+  # data = data[perm]
+  # names = list(np.array(names)[perm])
+
+  nlm  = imread("/projects/project-broaddus/denoise_experiments/shutter/e01/nlm/denoised.tif")
+  bm3d = np.array([imread(x) for x in sorted(glob("/projects/project-broaddus/denoise_experiments/shutter/e01/bm3d/*.tif"))])
+
+  n2gt = imread("/projects/project-broaddus/denoise_experiments/shutter/e01/n2gt2/pred.tif")
+  n2gt = n2gt[:,0] ## get rid of singleton channel
+
+  e01 = SimpleNamespace(data=data,names=names_e01)
+  dat = SimpleNamespace(gt=raw_gt,e01=e01,all=raw_all,bm3d=bm3d,n2gt=n2gt) #e02=e02)
+  return dat
+
 
 ## perform analysis
 

@@ -3,7 +3,7 @@
 ## (that's now in bashrc. e.g. usage below)
 ## csnake train_flower_n2gt
 
-localrules: analysis, bm3d_flower
+localrules: analysis
 
 ## flower rules
 
@@ -16,16 +16,16 @@ rule flower_n2v2_single:
     import n2v2_flower, predict
     d = n2v2_flower.setup_flower_shutter(flowerdata,output[0])
     ta = n2v2_flower.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
-    predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net_600.pt')
+    predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net600.pt')
 
 rule flower_n2v2_all:
   input: [flowerdir + f'mask{n:02d}/' for n in range(9)]
 
 rule flower_n2gt:
-  output: "/lustre/projects/project-broaddus/denoise_experiments/flower/e01/n2gt2/"
+  output: flowerdir + "n2gt2/"
   run:
     import n2gt_2d, predict
-    d  = n2gt_2d.setup(output[0])
+    d  = n2gt_2d.setup_flower_shutter(flowerdata, output[0])
     ta = n2gt_2d.init_training_artifacts()
     n2gt_2d.train(d,ta,end_epoch=600);
     predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net600.pt')
@@ -34,50 +34,82 @@ rule flower_nlm:
   output: flowerdir + 'nlm/'
   run:
     import nlm_comparison
-    nlm_comparison.nlm2d(flowerdata, output[0], sigma=0.1)
+    nlm_comparison.nlm_2d(flowerdata, output[0], sigma=0.1)
 
-rule bm3d_flower:
-  input:  "/projects/project-broaddus/rawdata/artifacts/flower.tif"
-  output: "/projects/project-broaddus/denoise_experiments/flower/e01/bm3d/"
+rule flower_bm3d:
+  output: flowerdir + "bm3d/"
   run:
-    from tifffile import imread,imsave
-    from segtools.numpy_utils import normalize3
-    from pathlib import Path
-    from subprocess import run
-    
-    img = imread(input[0])
-    img = normalize3(img,2,99.6)
-    
-    bm3d="/projects/project-broaddus/comparison_methods/bm3d/build/bm3d"
-    
-    tmpdir = Path("/projects/project-broaddus/denoise_experiments/data/flower_split_normed/")
-    outdir = Path(output[0]); outdir.mkdir(exist_ok=True,parents=True)
-    
-    for i in range(100):
-      tmpname = str(tmpdir / f"img{i:03d}.tif")
-      outname = str(outdir / f"img{i:03d}.tif")
+    import nlm_comparison
+    nlm_comparison.bm3d_2d(flowerdata, output[0], sigma=0.1)
 
-      imsave(tmpname, img[i])
-      run(f"{bm3d} {tmpname} 0.1 {outname}",shell=True)
-
-rule flower_table:
-  output: '/lustre/projects/project-broaddus/denoise_experiments/flower/e01/metrics.csv'
+rule flower_analysis:
+  output: 
+    flowerdir + 'table.csv',
+    flowerdir + 'table.png'
   run:
     import analysis2
     ## WARNING: input files are hardcoded
-    dat = analysis2.fulldata_fullpatch()
+    dat = analysis2.load_flower()
     analysis2.print_metrics_fullpatch(dat,outfile=output[0])
+    analysis2.make_visual_table(dat,outfile=output[1])
 
 ## shutter rules
 
 shutterdata = '/lustre/projects/project-broaddus/rawdata/artifacts/shutterclosed.tif'
 shutterdir  = '/lustre/projects/project-broaddus/denoise_experiments/shutter/e01/'
 
+rule shutter_n2v2_single:
+  output: shutterdir + 'mask{n}/'
+  run:
+    import n2v2_flower, predict
+    # d = n2v2_flower.setup_flower_shutter(shutterdata,output[0])
+    # ta = n2v2_flower.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
+    predict.predict_on_full_2d_stack(shutterdata,output[0],output[0] + 'models/net600.pt')
+
+rule shutter_n2v2_all:
+  input: [shutterdir + f'mask{n:02d}/' for n in range(9)]
+
+rule shutter_n2gt:
+  output: shutterdir + "n2gt2/"
+  run:
+    import n2gt_2d, predict
+    d  = n2gt_2d.setup_flower_shutter(shutterdata, output[0])
+    ta = n2gt_2d.init_training_artifacts()
+    n2gt_2d.train(d,ta,end_epoch=600);
+    predict.predict_on_full_2d_stack(shutterdata,output[0],output[0] + 'models/net600.pt')
+
 rule shutter_nlm:
   output: shutterdir + 'nlm/'
   run:
     import nlm_comparison
-    nlm_comparison.nlm2d(flowerdata, output[0], sigma=0.1)
+    nlm_comparison.nlm_2d(shutterdata, output[0], sigma=0.1)
+
+rule shutter_bm3d:
+  output: shutterdir + 'bm3d/'
+  run:
+    import nlm_comparison
+    nlm_comparison.bm3d_2d(shutterdata, output[0], sigma=0.1)
+
+rule shutter_analysis:
+  output:
+    shutterdir + 'table.csv',
+    shutterdir + 'table.png'
+  run:
+    import analysis2
+    ## WARNING: input files are hardcoded
+    dat = analysis2.load_shutter()
+    analysis2.print_metrics_fullpatch(dat,outfile=output[0])
+    analysis2.make_visual_table(dat,outfile=output[1])
+
+rule shutter_all:
+  input: rules.shutter_n2v2_all.input,
+         rules.shutter_n2gt.input,
+         rules.shutter_nlm.input,
+         rules.shutter_bm3d.input,
+
+
+
+## analysis 
 
 rule analysis:
   input:

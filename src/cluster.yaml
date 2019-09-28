@@ -7,6 +7,28 @@ __default__:
   n: "1"
   c: "1"
 
+
+flower_bm3d:
+  time: "02:00:00"
+  p: "batch"
+  gres: "gpu:0"
+
+shutter_bm3d:
+  time: "02:00:00"
+  p: "batch"
+  gres: "gpu:0"
+
+flower_analysis:
+  time: "01:00:00"
+  p: "batch"
+  gres: "gpu:0"
+
+shutter_analysis:
+  time: "01:00:00"
+  p: "batch"
+  gres: "gpu:0"
+
+
 # two:
 #   # J: "two"
 #   p: "gpu"
