@@ -29,7 +29,7 @@ def stak(*args,axis=0): return np.stack(args, axis)
 def imsave(x, name, **kwargs): return tifffile.imsave(str(name), x, **kwargs)
 def imread(name,**kwargs): return tifffile.imread(str(name), **kwargs)
 # def imsavefiji(x, **kwargs): return tifffile.imsave('/Users/broaddus/Desktop/stack.tiff', x, imagej=True, **kwargs)
-def imsavefiji(x, **kwargs): return tifffile.imsave('stack.tiff', x, imagej=True, **kwargs)
+# def imsavefiji(x, **kwargs): return tifffile.imsave('stack.tiff', x, imagej=True, **kwargs)
 
 # figure_dir      = Path('/Users/broaddus/Dropbox/phd/notes/denoise_paper/res').resolve()
 # experiments_dir = Path('/Volumes/project-broaddus/denoise_experiments').resolve()
@@ -39,6 +39,7 @@ rawdata_dir     = Path('/projects/project-broaddus/rawdata').resolve()
 
 
 def load_flower():
+
   ## load the flower dataset and build the GT
   flower_all = imread(rawdata_dir/'artifacts/flower.tif')
   flower_all = normalize3(flower_all,2,99.6)
@@ -99,7 +100,7 @@ def load_flower():
   n2gt = n2gt[:,0] ## get rid of singleton channel
 
   e01 = SimpleNamespace(data=data,names=names_e01)
-  dat = SimpleNamespace(gt=flower_gt,e01=e01,all=flower_all,bm3d=bm3d,n2gt=n2gt) #e02=e02)
+  dat = SimpleNamespace(gt=flower_gt,e01=e01,all=flower_all,bm3d=bm3d,n2gt=n2gt,nlm=nlm) #e02=e02)
   return dat
 
 def load_shutter():
@@ -161,9 +162,19 @@ def load_shutter():
   n2gt = n2gt[:,0] ## get rid of singleton channel
 
   e01 = SimpleNamespace(data=data,names=names_e01)
-  dat = SimpleNamespace(gt=raw_gt,e01=e01,all=raw_all,bm3d=bm3d,n2gt=n2gt) #e02=e02)
+  dat = SimpleNamespace(gt=raw_gt,e01=e01,all=raw_all,bm3d=bm3d,n2gt=n2gt,nlm=nlm) #e02=e02)
   return dat
 
+def load_cele():
+  raw  = np.array([imread(f"/lustre/projects/project-broaddus/rawdata/celegans_isbi/Fluo-N3DH-CE/01/t{i:03d}.tif") for i in [0,10,100,189]])
+  raw  = normalize3(raw,2,99.6)  
+  n2v  = np.array([imread(f"/projects/project-broaddus/denoise_experiments/cele/e01/cele1/pimgs/pimg01_{i:03d}.tif") for i in [0,10,100,189]])
+  n2v  = n2v[:,0]
+  n2v2 = np.array([imread(f"/projects/project-broaddus/denoise_experiments/cele/e01/cele4/pimgs/pimg01_{i:03d}.tif") for i in [0,10,100,189]])
+  n2v2 = n2v2[:,0]
+  nlm  = np.array([imread(f"/projects/project-broaddus/denoise_experiments/cele/e01/nlm/denoised{i:03d}.tif") for i in [0,10,100,189]])
+  dat  = SimpleNamespace(raw=raw,n2v2=n2v2,nlm=nlm,n2v=n2v)
+  return dat
 
 ## perform analysis
 
@@ -220,6 +231,7 @@ def print_metrics_fullpatch(dat, nth=1, outfile=None):
   table.append(single(dat.gt[None],"GT"))
   table.append(single(dat.n2gt,"N2GT"))
   table.append(single(dat.bm3d,"BM3D"))
+  table.append(single(dat.nlm,"NLM"))
 
   # table = [dat.e01.names, list(mse), list(psnr), list(ssim)]
   # table = list(zip_longest(*table))
@@ -235,13 +247,18 @@ def print_metrics_fullpatch(dat, nth=1, outfile=None):
   return table
 
 def make_visual_table(dat,outfile=None):
-  names = "RAW BM3D N2V N2V2 N2GT GT".split(' ')
-  rgb   = stak(dat.all[0], dat.bm3d[0], dat.e01.data[0,0], dat.e01.data[7,0], dat.n2gt[0], dat.gt)
+  names = "RAW NLM BM3D N2V N2V2 N2GT GT".split(' ')
+  rgb   = stak(dat.all[0], dat.nlm[0], dat.bm3d[0], dat.e01.data[0,0], dat.e01.data[7,0], dat.n2gt[0], dat.gt)
   rgb   = normalize3(rgb)
-  rgb   = rgb[:,256:512,256:512].transpose((1,0,2)).reshape((256,-1))
+  y,x   = 256, 256 ## top left pixel location
+  rgb   = rgb[:,y:y+256,x:x+256].transpose((1,0,2)).reshape((256,-1))
   print(rgb.shape)
   io.imsave(outfile,rgb)
 
-
-
-
+def make_visual_table_cele(dat, outfile=None):
+  names = "RAW NLM N2V N2V2".split(' ')
+  rgb = stak(dat.raw[0], dat.nlm[0], dat.n2v[0], dat.n2v2[0])
+  rgb = normalize3(rgb)
+  z,y,x = 14, 256, 256 ## top left pixel location
+  rgb   = rgb[:,z,y:y+256,x:x+256].transpose((1,0,2)).reshape((256,-1))
+  io.imsave(outfile,rgb)

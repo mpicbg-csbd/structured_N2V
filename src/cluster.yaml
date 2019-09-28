@@ -28,6 +28,10 @@ shutter_analysis:
   p: "batch"
   gres: "gpu:0"
 
+cele_analysis:
+  time: "01:00:00"
+  p: "batch"
+  gres: "gpu:0"
 
 # two:
 #   # J: "two"
