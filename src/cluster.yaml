@@ -1,35 +1,34 @@
 __default__:
   # J: "normjob"
-  time: "12:00:00"
+  t: "12:00:00"
   mem:  "128000"
   p:    "gpu"
   gres: "gpu:1"
   n: "1"
   c: "1"
 
-
 flower_bm3d:
-  time: "02:00:00"
+  t: "02:00:00"
   p: "batch"
   gres: "gpu:0"
 
 shutter_bm3d:
-  time: "02:00:00"
+  t: "02:00:00"
   p: "batch"
   gres: "gpu:0"
 
 flower_analysis:
-  time: "01:00:00"
+  t: "01:00:00"
   p: "batch"
   gres: "gpu:0"
 
 shutter_analysis:
-  time: "01:00:00"
+  t: "01:00:00"
   p: "batch"
   gres: "gpu:0"
 
 cele_analysis:
-  time: "01:00:00"
+  t: "01:00:00"
   p: "batch"
   gres: "gpu:0"
 

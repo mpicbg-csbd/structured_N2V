@@ -1,42 +1,46 @@
 ## invoke with:
-## alias csnake='snakemake -j 10 --cluster-config cluster.yaml --cluster "sbatch -J {rule} -p {cluster.p} --gres {cluster.gres} "'
+## alias csnake='snakemake -j 10 --cluster-config cluster.yaml --cluster "sbatch -J {rule} -p {cluster.p} --gres {cluster.gres} -n {cluster.n} -t {cluster.t} -c {cluster.c} --mem {cluster.mem}"'
 ## (that's now in bashrc. e.g. usage below)
 ## csnake train_flower_n2gt
+from types     import SimpleNamespace
 
-localrules: analysis
+localrules: analysis, flower_nlm_opt
 
 ## flower rules
 
 flowerdata = '/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif'
 flowerdir  = '/lustre/projects/project-broaddus/denoise_experiments/flower/e01/'
 
+# ruleorder: flower_n2v2_single > flower_n2v2_single_train
+
+# rule flower_n2v2_single_train:
+#   output: flowerdir + 'mask{n}/'
+#   run:
+#     import n2v2_flower
+#     d = n2v2_flower.setup_flower_shutter(flowerdata,output[0])
+#     ta = n2v2_flower.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
+
+# rule flower_n2v2_single_pred:
+#   input:  flowerdir + 'mask{n}/'
+#   output: flowerdir + 'mask{n}/pred.tif'
+#   run:
+#     import predict
+#     predict.predict_on_full_2d_stack(flowerdata,input[0],input[0] + 'models/net600.pt')
+
+# rule flower_n2v2_all_pred:
+#   input: [flowerdir + f'mask{n:02d}/pred.tif' for n in range(9)]
+
 rule flower_n2v2_single:
-  output: flowerdir + 'mask{n}/'
+  output: flowerdir + 'mask{n}_{m}/'
   run:
     import n2v2_flower, predict
-    # d = n2v2_flower.setup_flower_shutter(flowerdata,output[0])
-    # ta = n2v2_flower.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
-    predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net600.pt')
-
-rule flower_n2v2_single_train:
-  output: flowerdir + 'mask{n}/'
-  run:
-    import n2v2_flower
     d = n2v2_flower.setup_flower_shutter(flowerdata,output[0])
     ta = n2v2_flower.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
-
-rule flower_n2v2_single_pred:
-  input:  flowerdir + 'mask{n}/'
-  output: flowerdir + 'mask{n}/pred.tif'
-  run:
-    import predict
-    predict.predict_on_full_2d_stack(flowerdata,input[0],input[0] + 'models/net600.pt')
+    predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net600.pt')
 
 rule flower_n2v2_all:
-  input: [flowerdir + f'mask{n:02d}/' for n in range(9)]
+  input: [flowerdir + f'mask{n:02d}_{m}/' for n in range(9) for m in range(5)]
 
-rule flower_n2v2_all_pred:
-  input: [flowerdir + f'mask{n:02d}/pred.tif' for n in range(9)]
 
 rule flower_n2gt:
   output: flowerdir + "n2gt2/"
@@ -48,10 +52,19 @@ rule flower_n2gt:
     predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net600.pt')
 
 rule flower_nlm:
-  output: flowerdir + 'nlm/'
+  output: flowerdir + 'nlm/{n}/'
   run:
     import nlm_comparison
-    nlm_comparison.nlm_2d(flowerdata, output[0], sigma=0.1)
+    sigma = int(wildcards.n)/100
+    nlm_comparison.nlm_2d(flowerdata, output[0], sigma=sigma)
+
+nlm_vals = [5,10,50,100,200,500]
+rule flower_nlm_opt:
+  input: [flowerdir + f'nlm/{n:04d}/' for n in nlm_vals]
+  output: flowerdir + 'nlm/table.csv',
+  run:
+    import analysis2
+    analysis2.nlmeval(nlm_vals,outfile=output[0])
 
 rule flower_bm3d:
   output: flowerdir + "bm3d/"
@@ -128,6 +141,23 @@ rule shutter_all:
 
 celedata = '/lustre/projects/project-broaddus/rawdata/celegans_isbi/Fluo-N3DH-CE/01/'
 celedir  = '/lustre/projects/project-broaddus/denoise_experiments/cele/e01/'
+
+rule cele_n2v2_single:
+  output: celedir + 'maskx{n}y{m}/'
+  run:
+    import n2v2_cele #, predict
+    # output = [celedir + 'mask_test/']; 
+    # from types import SimpleNamespace
+    # wildcards = SimpleNamespace(n='00',m='04')
+    d  = n2v2_cele.setup(output[0])
+    ta = n2v2_cele.init_training_artifacts()
+    n2v2_cele.train(d, ta, end_epoch=100, xmask=range(int(wildcards.n)), ymask=range(int(wildcards.m)));
+    # predict.predict_on_full_2d_stack(celedata,output[0],output[0] + 'models/net600.pt')
+    n2v2_cele.predict_movies(d)
+
+rule cele_n2v2_all:
+  input: [celedir + f'maskx{n:02d}y{m:02d}/' for n in [0,1] for m in [0,4,8]]
+
 
 rule cele_nlm:
   output: celedir + 'nlm/'
