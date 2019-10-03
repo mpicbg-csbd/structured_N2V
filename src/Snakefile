@@ -11,7 +11,7 @@ localrules:
   flower_analysis_wild,
   flower_analysis_merge,
   flower_correlation,
-  shutter_correlation
+  shutter_correlation,
 
 ## flower data
 
@@ -100,14 +100,6 @@ rule flower_analysis_merge:
     analysis2.merge_all_results(all_tables,flowerdir)
     analysis2.make_metrics_table(all_tables,flowerdir)
 
-rule flower_correlation:
-  output: flower_corr
-  run:
-    import analysis2
-    analysis2.correlation_analysis(flowerdata,flower_corr,removeGT=False)
-    analysis2.correlation_analysis(flowerdata,flower_corr,removeGT=True)
-    # analysis2.correlation_analysis(shutterdata,corr_figures[1],removeGT=False)
-
 
 
 ## shutter rules
@@ -173,19 +165,15 @@ rule shutter_all:
          rules.shutter_nlm.input,
          rules.shutter_bm3d.input,
 
-rule shutter_correlation:
-  output: shutter_corr
-  run:
-    import analysis2
-    analysis2.correlation_analysis(shutterdata,shutter_corr,removeGT=False)
-
 
 ## c. elegans
 
-celedata = '/lustre/projects/project-broaddus/rawdata/celegans_isbi/Fluo-N3DH-CE/01/'
+times = [0,10,100,189]
+celedata = [f'/lustre/projects/project-broaddus/rawdata/celegans_isbi/Fluo-N3DH-CE/01/t{n:03d}.tif' for n in times]
 celedir  = '/lustre/projects/project-broaddus/denoise_experiments/cele/e01/'
 cele_n2v2_dirs  = [celedir + f'mask_1_x{n:02d}y{m:02d}/' for n in [0,1] for m in [0,4,8]]
 cele_n2v2_pimgs = [d + 'pimgs/pimg01_000.tif' for d in cele_n2v2_dirs]
+
 cele_nlm_vals = [5,10,50,100,200,500] + [9,11,40,70] + [14,20,30]
 cele_nlm_dirs = [celedir + f'nlm/{n:04d}/' for n in cele_nlm_vals]
 
@@ -228,14 +216,32 @@ rule cele_analysis:
     analysis2.make_visual_table_cele(dat,outfile=output[0])
 
 
+## figures!
 
-# rule cele_n2v2_single:
-#   output: celedir + 'mask{n}/'
-#   run:
-#     import n2v2_cele, predict
-#     d = n2v2_cele.setup(celedata,output[0])
-#     ta = n2v2_cele.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
-#     predict.predict_on_full_2d_stack(celedata,output[0],output[0] + 'models/net600.pt')
+data_fig1 = [flowerdata,
+             n2v2_dirs[0][0]+'pred.tif',
+             n2v2_dirs[6][0]+'pred.tif',
+             ]
+
+localrules: fig1
+
+rule fig1:
+  input: flower_results, flower_table_tex
+  output: flowerdir + 'fig1/'
+  run:
+    import analysis2, shutil
+    from distutils import dir_util
+
+    analysis2.correlation_analysis(shutterdata,output[0],'shut',removeGT=False)
+    analysis2.correlation_analysis(flowerdata,output[0],'fl',removeGT=False)
+    analysis2.correlation_analysis(flowerdata,output[0],'flGT',removeGT=True)
+
+    analysis2.fig1(data_fig1,output[0])
+    for d in flower_results: shutil.copy(d,output[0])
+    shutil.copy(flower_table_tex,output[0])
+    # dir_util.copy_tree(flower_corr,data_fig1[3])
+    # dir_util.copy_tree(flower_corr,data_fig1[3])
+
 
 
 

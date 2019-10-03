@@ -54,6 +54,37 @@ rawdata_dir     = Path('/projects/project-broaddus/rawdata').resolve()
 
 
 
+
+def fig1(data,outdir):
+  flower = imread(data[0])
+  n2v    = imread(data[1])
+  n2v2   = imread(data[2])
+  outdir = Path(outdir); outdir.mkdir(exist_ok=True,parents=True)
+
+  flower = normalize3(flower,2,99.6)
+  gt = flower.mean(0)
+
+  n2v  = n2v[0,0] ## sample channel
+  n2v2 = n2v2[0,0] ## sample channel
+  diff = (flower-gt).mean(0) ## avg over sample
+  diff = normalize3(diff) ## maybe extra normalization here?
+  flower = flower[0] ## sample
+
+  flower = flower.clip(0,1)
+  n2v = n2v.clip(0,1)
+  n2v2 = n2v2.clip(0,1)
+  diff = diff.clip(0,1)
+  gt = gt.clip(0,1)
+
+  ss = slice(256,256+64), slice(256,256+64)
+
+  io.imsave(outdir/'n2v.png',n2v[ss])
+  io.imsave(outdir/'n2v2.png',n2v2[ss])
+  io.imsave(outdir/'diff.png',diff[ss])
+  io.imsave(outdir/'flower.png',flower[ss])
+  io.imsave(outdir/'gt.png',gt[ss])
+
+
 def load_single_and_eval_metrics__flower(loaddir):
   flower_all = imread(rawdata_dir/'artifacts/flower.tif')
   flower_all = normalize3(flower_all,2,99.6)
@@ -133,24 +164,21 @@ def merge_all_results(all_result_files,outdir):
     plt.plot([i]*len([bm3d]), [bm3d], '.'); i+=1
     plt.savefig(outdir/f'table_{metric}.pdf')
 
-def correlation_analysis(rawdata,savedir,removeGT=False):
+def correlation_analysis(rawdata,savedir,name,removeGT=False):
   savedir = Path(savedir); savedir.mkdir(exist_ok=True,parents=True)
 
   img  = imread(rawdata)
   
-  png_name = 'autocorr_img.png'
-  pdf_name = 'autocorr_plot.pdf'
+  png_name = f'autocorr_img_{name}.png'
+  pdf_name = f'autocorr_plot_{name}.pdf'
 
-  if removeGT: 
-    img = img-img.mean(0)
-    png_name = 'autocorr_img-gt.png'
-    pdf_name = 'autocorr_plot-gt.pdf'
+  if removeGT: img = img-img.mean(0)
 
   corr = np.array([autocorrelation(img[i]) for i in range(10)])
   corr = corr.mean(0)
   a,b  = corr.shape
-  corr = corr[a//2-30:a//2+30, b//2-30:b//2+30]
-  corr = corr.real / corr.real.max()
+  corr = corr[a//2-15:a//2+15, b//2-15:b//2+15]
+  corr = corr / corr.max()
   io.imsave(savedir / png_name,normalize3(corr))
 
   d0 = np.arange(corr.shape[0])-corr.shape[0]//2
@@ -179,7 +207,7 @@ def autocorrelation(x):
     p = np.abs(f)**2
     pi = ifft2(p)
     pi = np.fft.fftshift(pi)
-    return pi
+    return pi.real
 
 ## old data loading
 
