@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torchsummary import summary
 
 import sys
-import ipdb
+# import ipdb
 import itertools
 import warnings
 import shutil
@@ -38,13 +38,13 @@ import torch_models
 
 ## copy and paste this command into bash to run a job via the job management queueing system.
 
-bashcmd = """
-mkdir -p /lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele4/
-cp n2v2_cele.py /lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele4/
-srun -J cele4 -n 1 -c 1 --mem=128000 -p gpu --gres=gpu:1 --time=12:00:00 -e std.err000 -o std.out000 time python3 /lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele4/n2v2_cele.py &
-"""
+# bashcmd = """
+# mkdir -p /lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele4/
+# cp n2v2_cele.py /lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele4/
+# srun -J cele4 -n 1 -c 1 --mem=128000 -p gpu --gres=gpu:1 --time=12:00:00 -e std.err000 -o std.out000 time python3 /lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele4/n2v2_cele.py &
+# """
 
-savedir = Path('/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele4/')
+# savedir = Path('/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele4/')
 
 ## lightweight funcs and utils
 
@@ -58,26 +58,15 @@ def init_dirs(savedir):
   (savedir/'counts/').mkdir(exist_ok=True)
   (savedir/'models/').mkdir(exist_ok=True)
 
-  shutil.copy2('/lustre/projects/project-broaddus/devseg_code/detect/n2v2_cele.py', savedir)
-  shutil.copy2('/lustre/projects/project-broaddus/devseg_code/detect/torch_models.py', savedir)
+  # shutil.copy2('/lustre/projects/project-broaddus/devseg_code/detect/n2v2_cele.py', savedir)
+  # shutil.copy2('/lustre/projects/project-broaddus/devseg_code/detect/torch_models.py', savedir)
 
 def wipe_dirs(savedir):
   if savedir.exists():
     shutil.rmtree(savedir)
     savedir.mkdir()
-  # for x in (savedir/'epochs/').glob('*.png'): x.unlink()
-  # for x in (savedir/'rgbs/').glob('*.png'): x.unlink()
-  # for x in (savedir/'pimgs/').glob('*.png'): x.unlink()
-  # for x in (savedir/'pts/').glob('*.png'): x.unlink()
-  # for x in (savedir/'movie/').glob('*.png'): x.unlink()
-  # for x in (savedir/'counts/').glob('*.png'): x.unlink()
-  # for x in savedir.glob('*.png'): x.unlink()
-  # for x in savedir.glob('*.pdf'): x.unlink()
-  # for x in savedir.glob('*.pkl'): x.unlink()
-  # for x in savedir.glob('*.py'): x.unlink()
-  # for x in savedir.glob('*.npz'): x.unlink()
 
-def cat(*args,axis=0): return np.concatenate(args, axis)
+def cat(*args,axis=0):  return np.concatenate(args, axis)
 def stak(*args,axis=0): return np.stack(args, axis)
 
 def imsave(x, name, **kwargs): return tifffile.imsave(str(name), x, **kwargs)
@@ -130,6 +119,13 @@ def random_slice(img_size, patch_size):
     return slice(start,end)
   return tuple([f(d,s) for d,s in zip(img_size, patch_size)])
 
+def init_training_artifacts():
+  ta = SimpleNamespace()
+  ta.losses = []
+  ta.lossdists = []
+  ta.e = 0
+  return ta
+
 ## heavier meaty functions
 
 def datagen(params={}, savedir=None):
@@ -180,21 +176,22 @@ def datagen(params={}, savedir=None):
 
   return data
 
-def setup(params={}):
+def setup(savedir):
 
+  savedir = Path(savedir)
   wipe_dirs(savedir)
   init_dirs(savedir)
 
   # data = cl_datagen2.datagen_self_sup(s=4, savedir=savedir)
   # data = cl_datagen2.datagen_all_kinds(savedir=savedir)
 
-  data = np.load('/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/data_cele.npz')['arr_0']
+  data = np.load('/lustre/projects/project-broaddus/denoise_experiments/cele/e01/data_cele.npz')['arr_0']
   # data = datagen(savedir=savedir)
   data = collapse2(data[None],'rtsczyx','c,ts,r,z,y,x')[0]
 
   d = SimpleNamespace()
   d.net = torch_models.Unet2(16,[[1],[1]],finallayer=nn.ReLU).cuda()
-  d.net.load_state_dict(torch.load('/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/models/net_randinit3D.pt'))
+  d.net.load_state_dict(torch.load('/lustre/projects/project-broaddus/denoise_experiments/flower/models/net_randinit3D.pt'))
   # d.net.apply(init_weights);
   d.savedir = savedir
   # torch.save(d.net.state_dict(), '/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/net_randinit3D.pt')
@@ -202,14 +199,7 @@ def setup(params={}):
   d.x1_all  = torch.from_numpy(data).float().cuda()
   return d
 
-def init_training_artifacts():
-  ta = SimpleNamespace()
-  ta.losses = []
-  ta.lossdists = []
-  ta.e = 0
-  return ta
-
-def train(d,ta=None,end_epoch=301):
+def train(d,ta=None,end_epoch=301,xmask=[0,1,2],ymask=[1,2,3,4,5]):
   if ta is None: ta = init_training_artifacts()
   batch_size = 4
   inds = np.arange(0,d.x1_all.shape[0])
@@ -221,6 +211,7 @@ def train(d,ta=None,end_epoch=301):
   lossdist = torch.zeros(d.x1_all.shape[0]) - 2
 
   patch_size = d.x1_all.shape[2:]
+  # ipdb.set_trace()
 
   if False:
     kern355 = -torch.ones((3,3,3))
@@ -229,7 +220,7 @@ def train(d,ta=None,end_epoch=301):
     kern355 = kern355[None,None].cuda() # batch and channels
 
   plt.figure()
-  for e in range(ta.e,end_epoch):
+  for e in range(ta.e,end_epoch+1):
     ta.e = e
     np.random.shuffle(inds)
     ta.lossdists.append(lossdist.numpy().copy())
@@ -255,17 +246,15 @@ def train(d,ta=None,end_epoch=301):
         n = int(np.prod(patch_size) * 0.02)
         x_inds = np.random.randint(0,patch_size[2],n)
         y_inds = np.random.randint(0,patch_size[1],n)
-       z_inds = np.random.randint(0,patch_size[0],n)
+        z_inds = np.random.randint(0,patch_size[0],n)
         ma = np.zeros(patch_size)
         
-        for i in np.r_[:2]:
-          # ma = binary_dilation(ma)
+        for i in xmask:
           m = x_inds-i >= 0;            ma[z_inds[m], y_inds[m],x_inds[m]-i] = 1
-          m = x_inds+i < patch_size[1]; ma[z_inds[m], y_inds[m],x_inds[m]+i] = 1
-        for i in np.r_[:2]:
-          # ma = binary_dilation(ma)
+          m = x_inds+i < patch_size[2]; ma[z_inds[m], y_inds[m],x_inds[m]+i] = 1
+        for i in ymask:
           m = y_inds-i >= 0;            ma[z_inds[m], y_inds[m]-i,x_inds[m]] = 1
-          m = y_inds+i < patch_size[0]; ma[z_inds[m], y_inds[m]+i,x_inds[m]] = 1
+          m = y_inds+i < patch_size[1]; ma[z_inds[m], y_inds[m]+i,x_inds[m]] = 1
 
         ma = ma.astype(np.uint8)
         ma[z_inds,y_inds,x_inds] = 2
@@ -278,7 +267,8 @@ def train(d,ta=None,end_epoch=301):
         if e%2==1: ma = 2-ma
         return ma
 
-      ma = random_pixel_mask()
+      # ma = random_pixel_mask()
+      ma = sparse_3set_mask()
       # ipdb.set_trace()
       # return ma
 
@@ -290,10 +280,10 @@ def train(d,ta=None,end_epoch=301):
       y1p = d.net(x1_damaged)
 
       dims = (1,2,3,4) ## all dims except batch
-      dx = 0.15*torch.abs(y1p[:,:,:,:,1:] - y1p[:,:,:,:,:-1])
-      dy = 0.15*torch.abs(y1p[:,:,:,1:] - y1p[:,:,:,:-1])
 
       if False:
+        dx = 0.15*torch.abs(y1p[:,:,:,:,1:] - y1p[:,:,:,:,:-1])
+        dy = 0.15*torch.abs(y1p[:,:,:,1:] - y1p[:,:,:,:-1])
         dy = 0.25*torch.abs(y1p[:,:,:,1:] - y1p[:,:,:,:-1])
         dz = 0.05*torch.abs(y1p[:,:,1:] - y1p[:,:,:-1])
         c0,c1,c2 = 0.0, 0.15, 1.0
@@ -315,27 +305,28 @@ def train(d,ta=None,end_epoch=301):
       loss.backward()
       opt.step()
 
-    with torch.no_grad():
-      example_yp = d.net(example_xs)
-      # xs_fft = xs_fft/xs_fft.max()
-      yp_fft = torch.fft((example_yp - example_yp.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1) #.cpu().detach().numpy()
-      yp_fft = torch.from_numpy(np.fft.fftshift(yp_fft.cpu(),axes=(-1,-2,-3))).cuda()
-      # yp_fft = yp_fft/yp_fft.max()
+    if e%10==0:
+      with torch.no_grad():
+        example_yp = d.net(example_xs)
+        # xs_fft = xs_fft/xs_fft.max()
+        yp_fft = torch.fft((example_yp - example_yp.mean())[...,None][...,[0,0]],2).norm(p=2,dim=-1) #.cpu().detach().numpy()
+        yp_fft = torch.from_numpy(np.fft.fftshift(yp_fft.cpu(),axes=(-1,-2,-3))).cuda()
+        # yp_fft = yp_fft/yp_fft.max()
 
-      rgb = torch.stack([example_xs,w1[[0]*len(example_xs)]/2,xs_fft,example_yp,yp_fft],0).cpu().detach().numpy()
-      arr = rgb.copy()
-      # type,samples,channels,z,y,x
-      rgb = normalize3(rgb,axs=(1,2,3,4,5))
-      rgb[[2,4]] = normalize3(rgb[[2,4]],pmin=0,pmax=99.0,axs=(1,2,3,4,5))
-      # return rgb
-      # remove channels,z and permute
-      rgb = collapse2(rgb[:,:,0,patch_size[0]//2],'tsyx','sy,tx')
-      # arr = collapse2(arr[:,:,0],'tsyx','sy,tx')
+        rgb = torch.stack([example_xs,w1[[0]*len(example_xs)]/2,xs_fft,example_yp,yp_fft],0).cpu().detach().numpy()
+        arr = rgb.copy()
+        # type,samples,channels,z,y,x
+        rgb = normalize3(rgb,axs=(1,2,3,4,5))
+        rgb[[2,4]] = normalize3(rgb[[2,4]],pmin=0,pmax=99.0,axs=(1,2,3,4,5))
+        # return rgb
+        # remove channels,z and permute
+        rgb = collapse2(rgb[:,:,0,patch_size[0]//2],'tsyx','sy,tx')
+        # arr = collapse2(arr[:,:,0],'tsyx','sy,tx')
 
-      with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        io.imsave(d.savedir / f'epochs/rgb_{e:03d}.png', rgb)
-        if e%20==0: np.save(d.savedir / f'epochs_npy/arr_{e:03d}.npy', arr)
+        with warnings.catch_warnings():
+          warnings.simplefilter("ignore")
+          io.imsave(d.savedir / f'epochs/rgb_{e:03d}.png', rgb)
+          if e%20==0: np.save(d.savedir / f'epochs_npy/arr_{e:03d}.npy', arr)
 
     batches_per_epoch = ceil(d.x1_all.shape[0]/batch_size)
     epochs = np.arange(len(ta.losses)) / batches_per_epoch
@@ -345,8 +336,8 @@ def train(d,ta=None,end_epoch=301):
     plt.yscale('log')
     plt.xlabel(f'1 epoch = {batches_per_epoch} batches')
     plt.savefig(d.savedir/f'loss.png',dpi=300)
-    if e%20==0:
-      torch.save(d.net.state_dict(), savedir/f'models/net{e:03d}.pt')
+    if e%50==0:
+      torch.save(d.net.state_dict(), d.savedir/f'models/net{e:03d}.pt')
 
   pklsave(ta.losses,d.savedir/f'losses.pkl')
   torch.save(d.net.state_dict(), d.savedir/f'models/net{ta.e:03d}.pt')
@@ -491,9 +482,10 @@ def predict_movies(d):
   for i in [0,10,100,189]:
   # for i in [189]:
     img = imread(f'/lustre/projects/project-broaddus/devseg_data/raw/celegans_isbi/Fluo-N3DH-CE/{ds}/t{i:03d}.tif')
-    lab = imread(f'/lustre/projects/project-broaddus/devseg_data/raw/celegans_isbi/Fluo-N3DH-CE/{ds}_GT/TRA/man_track{i:03d}.tif')
+    # lab = imread(f'/lustre/projects/project-broaddus/devseg_data/raw/celegans_isbi/Fluo-N3DH-CE/{ds}_GT/TRA/man_track{i:03d}.tif')
 
-    pmin, pmax = np.random.uniform(1,3), np.random.uniform(99.5,99.8)
+    # pmin, pmax = np.random.uniform(1,3), np.random.uniform(99.5,99.8)
+    pmin,pmax = 2, 99.6
     img = normalize3(img,pmin,pmax).astype(np.float32,copy=False)
 
     with torch.no_grad():
@@ -501,16 +493,16 @@ def predict_movies(d):
 
     rgb = cat(img, pimg[0], axis=1)
     rgb = rgb.clip(min=0)
-    moviesave(normalize3(rgb), savedir/f'movie/vert{ds}_{i:03d}.mp4', rate=4)
-    imsave(pimg, savedir/f'pimgs/pimg{ds}_{i:03d}.tif')
+    moviesave(normalize3(rgb), d.savedir/f'movie/vert{ds}_{i:03d}.mp4', rate=4)
+    imsave(pimg, d.savedir/f'pimgs/pimg{ds}_{i:03d}.tif')
 
     if False:
       rgb = i2rgb(img)
       rgb[...,[0,2]] = pimg[0,...,None][...,[0,0]]
       rgb[...,1] -= pimg[0]
       rgb = rgb.clip(min=0)
-      moviesave(normalize3(pimg[0]), savedir/f'movie/pimg{i:03d}.mp4', rate=4) ## set i=30 and i=150 to get res022 and res023.
-      moviesave(normalize3(rgb), savedir/f'movie/mix{i:03d}.mp4', rate=4)
+      moviesave(normalize3(pimg[0]), d.savedir/f'movie/pimg{i:03d}.mp4', rate=4) ## set i=30 and i=150 to get res022 and res023.
+      moviesave(normalize3(rgb), d.savedir/f'movie/mix{i:03d}.mp4', rate=4)
 
 
   ## make histogram of pimg values at points

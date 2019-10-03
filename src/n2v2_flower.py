@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torchsummary import summary
 
 import sys
-import ipdb
+# import ipdb
 import itertools
 import warnings
 import shutil
@@ -391,7 +391,7 @@ def train(d,ta=None,end_epoch=300,mask_shape=[1,2,3,4]):
     plt.savefig(d.savedir/f'loss.png',dpi=300)
 
     ## and save the model state
-    if e%10==0:
+    if e%50==0:
       torch.save(d.net.state_dict(), d.savedir/f'models/net{e:03d}.pt')
 
   pklsave(ta.losses,d.savedir/f'losses.pkl')
