@@ -2,6 +2,7 @@ import numpy as np
 import tifffile
 import subprocess
 import os
+import csv
 
 from tabulate  import tabulate
 from types     import SimpleNamespace
@@ -10,18 +11,32 @@ from itertools import zip_longest
 from glob      import glob
 
 from matplotlib      import pyplot as plt
+plt.switch_backend('Agg')
 from scipy           import ndimage
 from scipy.ndimage   import label, zoom
+from scipy.signal    import correlate2d
 from skimage         import io
 from skimage.measure import compare_ssim
+from numpy.fft import fft2,ifft2,ifftshift
+
+from uncertainties import unumpy
 
 # import spimagine
 from segtools.numpy_utils import normalize3, perm2, collapse2, splt
 from segtools.StackVis import StackVis
+import utils
+
 
 # from csbdeep.utils.utils import normalize_minmse
-import ipdb
-import csv
+# import ipdb
+# import json
+# from os.path import join as pjoin
+
+
+def writecsv(list_of_lists,outfile):
+  with open(outfile, "w", newline="\n") as f:
+    writer = csv.writer(f)
+    writer.writerows(list_of_lists)
 
 def cat(*args,axis=0): return np.concatenate(args, axis)
 def stak(*args,axis=0): return np.stack(args, axis)
@@ -38,28 +53,135 @@ experiments_dir = Path('/projects/project-broaddus/denoise_experiments/').resolv
 rawdata_dir     = Path('/projects/project-broaddus/rawdata').resolve()
 
 
-def nlmeval(nlm_vals,outfile):
+
+def load_single_and_eval_metrics__flower(loaddir):
   flower_all = imread(rawdata_dir/'artifacts/flower.tif')
   flower_all = normalize3(flower_all,2,99.6)
-  flower_gt  = flower_all.mean(0)  
-  nlm  = np.array([imread(f"/projects/project-broaddus/denoise_experiments/flower/e01/nlm/{n:04d}/denoised.tif") for n in nlm_vals])
+  flower_gt  = flower_all.mean(0)
 
-  table = []
-  for i in range(nlm.shape[0]):
-    table.append(eval_single(flower_gt,nlm[i],nlm_vals[i]))
+  ## deal with heterogeneous file names  
+  loaddir = Path(loaddir)
+  if (loaddir / 'denoised.tif').exists():
+    img = imread(loaddir / 'denoised.tif')
+  elif (loaddir / 'pred.tif').exists():
+    img = imread(loaddir / 'pred.tif')
+  elif (loaddir / 'img000.tif').exists():
+    img = np.array([imread(loaddir / f'img{n:03d}.tif') for n in range(100)])
+
+  ## deal with singleton channels
+  if img.shape[1]==1: img=img[:,0]
+
+  met = eval_single_metrics(flower_gt, img)
+
+  header=['mse','psnr','ssim']
+  writecsv([header,met], loaddir / 'table.csv')
+
+def eval_single_metrics(gt,ys,nth=1):
+  ys   = ys[::nth]
+  mse  = ((gt-ys)**2).mean((0,1,2))
+  psnr = 10*np.log10(1/mse)
+  ssim = np.array([compare_ssim(gt,ys[i].astype(np.float64)) for i in range(ys.shape[0]//50)])
+  ssim = ssim.mean()
+  return [mse,psnr,ssim]
+
+def single(csvfile):
+  r = list(csv.reader(open(csvfile), delimiter=','))
+  return [float(x) for x in r[1]]
+
+def make_metrics_table(all_result_files,outdir):
+  outdir = Path(outdir)  
+  res  = utils.recursive_map2(single, all_result_files)
   
-  header=['name','mse','psnr','ssim']
-  with open(outfile, "w", newline="\n") as f:
-    writer = csv.writer(f)
-    writer.writerows([header] + table)
+  def un(x): return unumpy.uarray(x.mean(0),x.std(0)*1)
+  n2v  = un(np.array(res['n2v'])[0])
+  n2v2  = un(np.array(res['n2v'])[5])
+  n2gt = un(np.array(res['n2gt']))
+  nlm  = np.array(res['nlm'])
+  bm3d = np.array(res['bm3d'])
+  ## MSE & PSNR & SSIM
+  s1 = "{0:1ueS} & {1:1uL} & {2:1uL}" ## numbers w uncertainties
+  s2 = "{0:1e} & {1:1f} & {2:1f}" ## normal floats
+  lines = [
+    s1.format(*n2v),
+    s1.format(*n2v2),
+    s1.format(*n2gt),
+    s2.format(*nlm),
+    s2.format(*bm3d),
+  ]
+  table = " \\\\\n".join(lines)
+  table = table.replace('\\pm','$\\pm$')
 
-def shutter_correlation():
-  from scipy.signal import correlate2d
-  img  = imread('/projects/project-broaddus/rawdata/artifacts/shutterclosed.tif')
-  img  = img[:, 256:512, 256:512]
-  corr = np.array([correlate2d(img[i],img[i],mode='same') for i in range(1)])
-  io.imsave('/projects/project-broaddus/denoise_experiments/shutter_corr.png',corr.mean(0))
-  return corr
+  print(table, file=open(outdir / 'table.tex','w'))
+  return table
+
+def merge_all_results(all_result_files,outdir):
+  outdir = Path(outdir)
+  res  = utils.recursive_map2(single, all_result_files)
+
+  for n,metric in enumerate(['mse','psnr','ssim']):
+    n2v  = np.array(res['n2v'])[...,n]
+    n2gt = np.array(res['n2gt'])[...,n]
+    nlm  = np.array(res['nlm'])[...,n]
+    bm3d = np.array(res['bm3d'])[...,n]
+
+    plt.figure()
+    i=0
+    for d in n2v:
+      plt.plot([i]*len(d),  d, '.'); i+=1
+    plt.plot([i]*len(n2gt), n2gt, '.'); i+=1
+    plt.plot([i]*len([nlm]),  [nlm], '.'); i+=1
+    plt.plot([i]*len([bm3d]), [bm3d], '.'); i+=1
+    plt.savefig(outdir/f'table_{metric}.pdf')
+
+def correlation_analysis(rawdata,savedir,removeGT=False):
+  savedir = Path(savedir); savedir.mkdir(exist_ok=True,parents=True)
+
+  img  = imread(rawdata)
+  
+  png_name = 'autocorr_img.png'
+  pdf_name = 'autocorr_plot.pdf'
+
+  if removeGT: 
+    img = img-img.mean(0)
+    png_name = 'autocorr_img-gt.png'
+    pdf_name = 'autocorr_plot-gt.pdf'
+
+  corr = np.array([autocorrelation(img[i]) for i in range(10)])
+  corr = corr.mean(0)
+  a,b  = corr.shape
+  corr = corr[a//2-30:a//2+30, b//2-30:b//2+30]
+  corr = corr.real / corr.real.max()
+  io.imsave(savedir / png_name,normalize3(corr))
+
+  d0 = np.arange(corr.shape[0])-corr.shape[0]//2
+  d1 = np.arange(corr.shape[1])-corr.shape[1]//2
+  plt.figure()
+  a,b = corr.shape
+  # y = corr.mean(1); y = y/y.max()
+  y = corr[:,b//2]
+  plt.plot(d0,y,'.-', label='y profile')
+  # y = corr.mean(0); y = y/y.max()
+  y = corr[a//2,:]
+  plt.plot(d1,y,'.-', label='x profile')
+  plt.legend()
+  plt.savefig(savedir / pdf_name)
+
+
+def autocorrelation(x):
+    """
+    2D autocorrelation
+    remove mean per-patch (not global GT)
+    normalize stddev to 1
+    """
+    x = (x - np.mean(x))/np.std(x)
+    # x = np.pad(x, [(50,50),(50,50)], mode='constant')
+    f = fft2(x)
+    p = np.abs(f)**2
+    pi = ifft2(p)
+    pi = np.fft.fftshift(pi)
+    return pi
+
+## old data loading
 
 def load_flower():
 
@@ -67,23 +189,17 @@ def load_flower():
   flower_all = imread(rawdata_dir/'artifacts/flower.tif')
   flower_all = normalize3(flower_all,2,99.6)
   flower_gt  = flower_all.mean(0)
-  # flower_gt_patches = flower_gt.reshape((4,256,4,256)).transpose((0,2,1,3)).reshape((16,256,256))
-  # flower_gt_patches = flower_gt_patches[[0,3,5,12]]
 
-
-
-    ## load the predictions from single-phase models (600th epoch)
-  img0  = imread(experiments_dir / 'flower/e01/mask00/pred.tif')   # 0  n2v
-  img1  = imread(experiments_dir / 'flower/e01/mask01/pred.tif')   # 1  xox
-  img2  = imread(experiments_dir / 'flower/e01/mask02/pred.tif')   # 2  plus
-  img3  = imread(experiments_dir / 'flower/e01/mask03/pred.tif')   # 3  bigplus
-  img4 = imread(experiments_dir / 'flower/e01/mask04/pred.tif')  # 4  8xo8x
-  img5 = imread(experiments_dir / 'flower/e01/mask05/pred.tif')  # 5  xxoxx
-  img6 = imread(experiments_dir / 'flower/e01/mask06/pred.tif')  # 6  xxxoxxx
-  img7 = imread(experiments_dir / 'flower/e01/mask07/pred.tif')  # 7  xxxxoxxxx
-  img8 = imread(experiments_dir / 'flower/e01/mask08/pred.tif')  # 8  xxxxxoxxxxx
-  # img15 = imread(experiments_dir / 'flower/e01/mask10/pred.tif')  # 9  xxxxxxoxxxxxx
-  # img16 = imread(experiments_dir / 'flower/e01/mask11/pred.tif')  # 10  xxxxxxxoxxxxxxx
+  ## load the predictions from single-phase models (600th epoch)
+  img0  = np.array([imread(experiments_dir / f'flower/e01/mask00_{n}/pred.tif') for n in range(5)])
+  img1  = np.array([imread(experiments_dir / f'flower/e01/mask01_{n}/pred.tif') for n in range(5)])
+  img2  = np.array([imread(experiments_dir / f'flower/e01/mask02_{n}/pred.tif') for n in range(5)])
+  img3  = np.array([imread(experiments_dir / f'flower/e01/mask03_{n}/pred.tif') for n in range(5)])
+  img4  = np.array([imread(experiments_dir / f'flower/e01/mask04_{n}/pred.tif') for n in range(5)])
+  img5  = np.array([imread(experiments_dir / f'flower/e01/mask05_{n}/pred.tif') for n in range(5)])
+  img6  = np.array([imread(experiments_dir / f'flower/e01/mask06_{n}/pred.tif') for n in range(5)])
+  img7  = np.array([imread(experiments_dir / f'flower/e01/mask07_{n}/pred.tif') for n in range(5)])
+  img8  = np.array([imread(experiments_dir / f'flower/e01/mask08_{n}/pred.tif') for n in range(5)])
 
   names = "N2V 1x 2x 3x 4x 5x 6x 7x 8x".split(' ')
 
@@ -116,7 +232,7 @@ def load_flower():
       "xxxxxxxoxxxxxxx",
       ]
 
-  data = stak(img0, img1, img2, img3, img4, img5, img6, img7, img8,) 
+  data = stak(img0, img1, img2, img3, img4, img5, img6, img7, img8,)
   # data = stak(img6, img7, img8, img9, img10, img11, img12, img13, img14, img15, img16,)
 
   # data[:,[2,4]] = normalize3(np.log(normalize3(data[:,[2,4]],0,99)+1e-7)) ## k-space channels
@@ -215,7 +331,26 @@ def load_cele():
   dat  = SimpleNamespace(raw=raw,n2v2=n2v2,nlm=nlm,n2v=n2v)
   return dat
 
-## perform analysis
+## old evaluation
+
+def eval_single(gt,ys,name,nth=1):
+  met = eval_single_metrics(gt,ys,nth)
+  return [name] + met
+
+def nlmeval(nlm_vals,outfile):
+  flower_all = imread(rawdata_dir/'artifacts/flower.tif')
+  flower_all = normalize3(flower_all,2,99.6)
+  flower_gt  = flower_all.mean(0)  
+  nlm  = np.array([imread(f"/projects/project-broaddus/denoise_experiments/flower/e01/nlm/{n:04d}/denoised.tif") for n in nlm_vals])
+
+  table = []
+  for i in range(nlm.shape[0]):
+    table.append(eval_single(flower_gt,nlm[i],nlm_vals[i]))
+  
+  header=['name','mse','psnr','ssim']
+  with open(outfile, "w", newline="\n") as f:
+    writer = csv.writer(f)
+    writer.writerows([header] + table)
 
 def noise_distributions(dat=None):
   """
@@ -243,15 +378,6 @@ def noise_distributions(dat=None):
   
   plt.legend()
 
-
-def eval_single(gt,ys,name,nth=1):
-  ys   = ys[::nth]
-  mse  = ((gt-ys)**2).mean((0,1,2))
-  psnr = 10*np.log10(1/mse)
-  ssim = np.array([compare_ssim(gt,ys[i].astype(np.float64)) for i in range(ys.shape[0]//50)])
-  ssim = ssim.mean()
-  return [name, mse, psnr, ssim]
-
 def print_metrics_fullpatch(dat, nth=1, outfile=None):
   """
   Running on full dataset takes XXX seconds.
@@ -263,8 +389,10 @@ def print_metrics_fullpatch(dat, nth=1, outfile=None):
   table = []
   
   ## shape == (11,100,1024,1024) == model,sample_i,y,x
-  n2v2 = dat.e01.data 
+  n2v2 = dat.e01.data
   for i in range(n2v2.shape[0]):
+    res = np.array([eval_single(dat.gt,n2v2[i,j], dat.e01.names[i]) for j in n2v2[i].shape[0]])
+
     table.append(eval_single(dat.gt,n2v2[i], dat.e01.names[i]))
 
   table.append(eval_single(dat.gt,dat.all,"RAW"))
