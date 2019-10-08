@@ -12,6 +12,8 @@ from glob      import glob
 
 from matplotlib      import pyplot as plt
 plt.switch_backend('Agg')
+import matplotlib.gridspec as gridspec
+
 from scipy           import ndimage
 from scipy.ndimage   import label, zoom
 from scipy.signal    import correlate2d
@@ -26,12 +28,10 @@ from segtools.numpy_utils import normalize3, perm2, collapse2, splt
 from segtools.StackVis import StackVis
 import utils
 
-
 # from csbdeep.utils.utils import normalize_minmse
 # import ipdb
 # import json
 # from os.path import join as pjoin
-
 
 def writecsv(list_of_lists,outfile):
   with open(outfile, "w", newline="\n") as f:
@@ -43,52 +43,47 @@ def stak(*args,axis=0): return np.stack(args, axis)
 
 def imsave(x, name, **kwargs): return tifffile.imsave(str(name), x, **kwargs)
 def imread(name,**kwargs): return tifffile.imread(str(name), **kwargs)
-# def imsavefiji(x, **kwargs): return tifffile.imsave('/Users/broaddus/Desktop/stack.tiff', x, imagej=True, **kwargs)
-# def imsavefiji(x, **kwargs): return tifffile.imsave('stack.tiff', x, imagej=True, **kwargs)
 
-# figure_dir      = Path('/Users/broaddus/Dropbox/phd/notes/denoise_paper/res').resolve()
-# experiments_dir = Path('/Volumes/project-broaddus/denoise_experiments').resolve()
-figure_dir      = Path('/projects/project-broaddus/denoise_experiments/figures/').resolve(); figure_dir.mkdir(exist_ok=True,parents=True)
-experiments_dir = Path('/projects/project-broaddus/denoise_experiments/').resolve()
-rawdata_dir     = Path('/projects/project-broaddus/rawdata').resolve()
+## zero parameter functions. produce final results. never change targets.
+## these functions reference files.py, and typically they require many results from 
+## within files.py, bringing them all together for analysis.
 
+import json
+import shutil
+import files
 
+def gather_results_to_figdata_dir():
+  Path(files.d_figdata).mkdir(exist_ok=True,parents=True)
+  res  = utils.recursive_map2(csv2floatList, files.all_tables)
+  json.dump(res,open(files.d_figdata + 'allscores.json','w'))
+  
+  flower = imread(files.flowerdata)
+  gt = normalize3(flower,2,99.6).mean(0)
 
-
-def fig1(data,outdir):
-  flower = imread(data[0])
-  n2v    = imread(data[1])
-  n2v2   = imread(data[2])
-  outdir = Path(outdir); outdir.mkdir(exist_ok=True,parents=True)
-
-  flower = normalize3(flower,2,99.6)
-  gt = flower.mean(0)
-
-  n2v  = n2v[0,0] ## sample channel
-  n2v2 = n2v2[0,0] ## sample channel
-  diff = (flower-gt).mean(0) ## avg over sample
-  diff = normalize3(diff) ## maybe extra normalization here?
-  flower = flower[0] ## sample
-
-  flower = flower.clip(0,1)
-  n2v = n2v.clip(0,1)
-  n2v2 = n2v2.clip(0,1)
-  diff = diff.clip(0,1)
-  gt = gt.clip(0,1)
-
-  ss = slice(256,256+64), slice(256,256+64)
-
-  io.imsave(outdir/'n2v.png',n2v[ss])
-  io.imsave(outdir/'n2v2.png',n2v2[ss])
-  io.imsave(outdir/'diff.png',diff[ss])
-  io.imsave(outdir/'flower.png',flower[ss])
-  io.imsave(outdir/'gt.png',gt[ss])
+  imsave(flower[:5], files.d_figdata + 'flower.tif')
+  imsave(gt, files.d_figdata + 'gt.tif')
+  imsave(imread(files.n2v2_dirs[0][0]+'pred.tif')[:5,0], files.d_figdata + 'n2v2.tif')
+  imsave(imread(files.n2gt_dirs[0]+'pred.tif')[:5,0], files.d_figdata + 'n2gt.tif')
+  imsave(np.array([imread(files.bm3d_dir+f'img{n:03d}.tif') for n in range(5)]), files.d_figdata + 'bm3d.tif')
+  imsave(imread(files.nlm_dir+'denoised.tif')[:5], files.d_figdata + 'nlm.tif')
+  
+  imsave(imread(files.shutterdata)[:5], files.d_figdata + 'shutter.tif')
+  
+  imsave(np.array([imread(f) for f in files.celedata]), files.d_figdata + 'cele.tif')
 
 
-def load_single_and_eval_metrics__flower(loaddir):
-  flower_all = imread(rawdata_dir/'artifacts/flower.tif')
-  flower_all = normalize3(flower_all,2,99.6)
-  flower_gt  = flower_all.mean(0)
+### utils 
+
+def csv2floatList(csvfile):
+  r = list(csv.reader(open(csvfile), delimiter=','))
+  return [float(x) for x in r[1]]
+
+## parameterized funcs. have no knowledge of filesys.
+
+def load_prediction_and_eval_metrics__generic(rawdata, loaddir):
+  raw_all = imread(rawdata)
+  raw_all = normalize3(raw_all,2,99.6)
+  gt  = raw_all.mean(0)
 
   ## deal with heterogeneous file names  
   loaddir = Path(loaddir)
@@ -102,7 +97,7 @@ def load_single_and_eval_metrics__flower(loaddir):
   ## deal with singleton channels
   if img.shape[1]==1: img=img[:,0]
 
-  met = eval_single_metrics(flower_gt, img)
+  met = eval_single_metrics(gt, img)
 
   header=['mse','psnr','ssim']
   writecsv([header,met], loaddir / 'table.csv')
@@ -115,62 +110,13 @@ def eval_single_metrics(gt,ys,nth=1):
   ssim = ssim.mean()
   return [mse,psnr,ssim]
 
-def single(csvfile):
-  r = list(csv.reader(open(csvfile), delimiter=','))
-  return [float(x) for x in r[1]]
-
-def make_metrics_table(all_result_files,outdir):
-  outdir = Path(outdir)  
-  res  = utils.recursive_map2(single, all_result_files)
-  
-  def un(x): return unumpy.uarray(x.mean(0),x.std(0)*1)
-  n2v  = un(np.array(res['n2v'])[0])
-  n2v2  = un(np.array(res['n2v'])[5])
-  n2gt = un(np.array(res['n2gt']))
-  nlm  = np.array(res['nlm'])
-  bm3d = np.array(res['bm3d'])
-  ## MSE & PSNR & SSIM
-  s1 = "{0:1ueS} & {1:1uL} & {2:1uL}" ## numbers w uncertainties
-  s2 = "{0:1e} & {1:1f} & {2:1f}" ## normal floats
-  lines = [
-    s1.format(*n2v),
-    s1.format(*n2v2),
-    s1.format(*n2gt),
-    s2.format(*nlm),
-    s2.format(*bm3d),
-  ]
-  table = " \\\\\n".join(lines)
-  table = table.replace('\\pm','$\\pm$')
-
-  print(table, file=open(outdir / 'table.tex','w'))
-  return table
-
-def merge_all_results(all_result_files,outdir):
-  outdir = Path(outdir)
-  res  = utils.recursive_map2(single, all_result_files)
-
-  for n,metric in enumerate(['mse','psnr','ssim']):
-    n2v  = np.array(res['n2v'])[...,n]
-    n2gt = np.array(res['n2gt'])[...,n]
-    nlm  = np.array(res['nlm'])[...,n]
-    bm3d = np.array(res['bm3d'])[...,n]
-
-    plt.figure()
-    i=0
-    for d in n2v:
-      plt.plot([i]*len(d),  d, '.'); i+=1
-    plt.plot([i]*len(n2gt), n2gt, '.'); i+=1
-    plt.plot([i]*len([nlm]),  [nlm], '.'); i+=1
-    plt.plot([i]*len([bm3d]), [bm3d], '.'); i+=1
-    plt.savefig(outdir/f'table_{metric}.pdf')
-
 def correlation_analysis(rawdata,savedir,name,removeGT=False):
   savedir = Path(savedir); savedir.mkdir(exist_ok=True,parents=True)
 
   img  = imread(rawdata)
   
-  png_name = f'autocorr_img_{name}.png'
-  pdf_name = f'autocorr_plot_{name}.pdf'
+  # png_name = f'autocorr_img_{name}.png'
+  # pdf_name = f'autocorr_plot_{name}.pdf'
 
   if removeGT: img = img-img.mean(0)
 
@@ -179,21 +125,25 @@ def correlation_analysis(rawdata,savedir,name,removeGT=False):
   a,b  = corr.shape
   corr = corr[a//2-15:a//2+15, b//2-15:b//2+15]
   corr = corr / corr.max()
-  io.imsave(savedir / png_name,normalize3(corr))
+  # io.imsave(savedir / png_name,normalize3(corr))
+  np.save(savedir/f'corr_raw_{name}.npy',corr)
 
-  d0 = np.arange(corr.shape[0])-corr.shape[0]//2
-  d1 = np.arange(corr.shape[1])-corr.shape[1]//2
-  plt.figure()
-  a,b = corr.shape
-  # y = corr.mean(1); y = y/y.max()
-  y = corr[:,b//2]
-  plt.plot(d0,y,'.-', label='y profile')
-  # y = corr.mean(0); y = y/y.max()
-  y = corr[a//2,:]
-  plt.plot(d1,y,'.-', label='x profile')
-  plt.legend()
-  plt.savefig(savedir / pdf_name)
+  ## This is now done entirely during figure plotting, locally.
 
+  # d0 = np.arange(corr.shape[0])-corr.shape[0]//2
+  # d1 = np.arange(corr.shape[1])-corr.shape[1]//2
+  # plt.figure()
+  # a,b = corr.shape
+  # # y = corr.mean(1); y = y/y.max()
+  # y = corr[:,b//2]
+  # plt.plot(d0,y,'.-', label='y profile')
+  # # y = corr.mean(0); y = y/y.max()
+  # y = corr[a//2,:]
+  # plt.plot(d1,y,'.-', label='x profile')
+  # plt.legend()
+  # plt.savefig(savedir / pdf_name)
+
+### utils
 
 def autocorrelation(x):
     """

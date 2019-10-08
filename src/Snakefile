@@ -2,189 +2,126 @@
 ## alias csnake='snakemake -j 10 --cluster-config cluster.yaml --cluster "sbatch -J {rule} -p {cluster.p} --gres {cluster.gres} -n {cluster.n} -t {cluster.t} -c {cluster.c} --mem {cluster.mem}"'
 ## (that's now in bashrc. e.g. usage below)
 ## csnake train_flower_n2gt
-from types import SimpleNamespace
-from utils import flatten, recursive_map2
+# from types import SimpleNamespace
+# from utils import flatten, recursive_map2
+
+import files as F
 
 localrules:
   shutter_nlm_all,
   cele_nlm_all,
   flower_analysis_wild,
   flower_analysis_merge,
-  flower_correlation,
-  shutter_correlation,
 
 ## flower data
 
-flowerdata = '/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif'
-flowerdir  = '/lustre/projects/project-broaddus/denoise_experiments/flower/e01/'
-# flowerdir  = '/Users/broaddus/Desktop/falconhome/denoise_experiments/flower/e01/'
-
-n2v2_dirs      = [[flowerdir + f'mask{n:02d}_{m}/' for m in range(6)] for n in range(13)]
-n2v2_tables    = recursive_map2(lambda d: d + 'table.csv', n2v2_dirs)
-n2gt_dirs      = [flowerdir + f"n2gt2/{n}/" for n in range(6)]
-n2gt_tables    = recursive_map2(lambda d: d + 'table.csv', n2gt_dirs)
-bm3d_dir       = flowerdir + "bm3d/"
-bm3d_tables    = bm3d_dir + 'table.csv'
-nlm_dir        = flowerdir + "nlm/"
-nlm_tables     = nlm_dir + 'table.csv'
-
-
-all_tables     = {'n2v':n2v2_tables, 'n2gt':n2gt_tables, 'nlm':nlm_tables, 'bm3d':bm3d_tables}
-flower_results = [
-                  flowerdir + 'table_mse.pdf',
-                  flowerdir + 'table_psnr.pdf',
-                  flowerdir + 'table_ssim.pdf',
-                  ]
-flower_table_tex = flowerdir + 'table.tex'
-flower_corr  = flowerdir + 'autocorr/'
-
+rule void:
 
 rule flower_top:
   input: 
-    flower_results,
-    flower_table_tex,
-    flower_corr,
-
-    n2v2_tables,
-    n2gt_tables,
-    nlm_tables,
-    bm3d_tables,
-
-    # n2v2_dirs,
-    # n2gt_dirs,
-    # bm3d_dir,
-    # nlm_dirs,
-
+    F.flower_results,
+    F.flower_table_tex,
 
 rule flower_n2v2_wild:
-  output: flowerdir + 'mask{n}_{m}/'
+  output: F.flowerdir + 'mask{n}_{m}/'
   run:
     import n2v2_flower, predict
-    d = n2v2_flower.setup_flower_shutter(flowerdata,output[0])
+    d = n2v2_flower.setup_flower_shutter(F.flowerdata,output[0])
     ta = n2v2_flower.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
-    predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net600.pt')
+    predict.predict_on_full_2d_stack(F.flowerdata,output[0],output[0] + 'models/net600.pt')
 
 rule flower_n2gt_wild:
-  output: flowerdir + "n2gt2/{n}/"
+  output: F.flowerdir + "n2gt2/{n}/"
   run:
     import n2gt_2d, predict
-    d  = n2gt_2d.setup_flower_shutter(flowerdata, output[0])
+    d  = n2gt_2d.setup_flower_shutter(F.flowerdata, output[0])
     ta = n2gt_2d.init_training_artifacts()
     n2gt_2d.train(d,ta,end_epoch=600);
-    predict.predict_on_full_2d_stack(flowerdata,output[0],output[0] + 'models/net600.pt')
+    predict.predict_on_full_2d_stack(F.flowerdata,output[0],output[0] + 'models/net600.pt')
 
 rule flower_nlm:
-  output: nlm_dir
+  output: F.nlm_dir
   run:
     import nlm_comparison
-    nlm_comparison.nlm_2d(flowerdata, output[0])
+    nlm_comparison.nlm_2d(F.flowerdata, output[0])
 
 rule flower_bm3d:
-  output: bm3d_dir
+  output: F.bm3d_dir
   run:
     import nlm_comparison
-    nlm_comparison.bm3d_2d(flowerdata, output[0])
+    nlm_comparison.bm3d_2d(F.flowerdata, output[0])
 
 rule flower_analysis_wild:
-  input:  flowerdir + '{dirname}/'
-  output: flowerdir + '{dirname}/table.csv'
+  input:  F.flowerdir + '{dirname}/'
+  output: F.flowerdir + '{dirname}/table.csv'
   run:
     import analysis2
-    analysis2.load_single_and_eval_metrics__flower(input[0])
+    analysis2.load_prediction_and_eval_metrics__generic(input[0])
 
 rule flower_analysis_merge:
-  input: all_tables.values()
-  output: flower_results, flower_table_tex
+  input: F.all_tables.values()
+  output: F.flower_results, F.flower_table_tex
   run:
     import analysis2
-    analysis2.merge_all_results(all_tables,flowerdir)
-    analysis2.make_metrics_table(all_tables,flowerdir)
+    analysis2.merge_all_results()
+    analysis2.make_metrics_table()
 
 
 
-## shutter rules
-
-shutterdata = '/lustre/projects/project-broaddus/rawdata/artifacts/shutterclosed.tif'
-shutterdir  = '/lustre/projects/project-broaddus/denoise_experiments/shutter/e01/'
-shutter_corr = shutterdir + 'autocorr/'
-shutter_dir_nlm = shutterdir + 'nlm/'
-shutter_dir_bm3d = shutterdir + 'bm3d/'
 
 
 rule shuttertop:
   input:
-    shutter_dir_nlm,
-    shutter_dir_bm3d
+    F.shutter_dir_nlm,
+    F.shutter_dir_bm3d
 
-rule shutter_n2v2_single:
-  output: shutterdir + 'mask{n}/'
-  run:
-    import n2v2_flower, predict
-    # d = n2v2_flower.setup_flower_shutter(shutterdata,output[0])
-    # ta = n2v2_flower.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
-    predict.predict_on_full_2d_stack(shutterdata,output[0],output[0] + 'models/net600.pt')
-
-rule shutter_n2v2_all:
-  input: [shutterdir + f'mask{n:02d}/' for n in range(9)]
-
-rule shutter_n2gt:
-  output: shutterdir + "n2gt2/"
-  run:
-    import n2gt_2d, predict
-    d  = n2gt_2d.setup_flower_shutter(shutterdata, output[0])
-    ta = n2gt_2d.init_training_artifacts()
-    n2gt_2d.train(d,ta,end_epoch=600);
-    predict.predict_on_full_2d_stack(shutterdata,output[0],output[0] + 'models/net600.pt')
-
-rule shutter_nlm:
-  output: shutter_dir_nlm
-  run:
-    import nlm_comparison
-    nlm_comparison.nlm_2d(shutterdata, output[0])
-
-rule shutter_bm3d:
-  output: shutter_dir_bm3d
-  run:
-    import nlm_comparison
-    nlm_comparison.bm3d_2d(shutterdata, output[0])
-
-rule shutter_analysis:
-  output:
-    shutterdir + 'table.csv',
-    shutterdir + 'table.png'
+rule shutter_analysis_wild:
+  input:  F.shutterdir + '{dirname}/'
+  output: F.shutterdir + '{dirname}/table.csv'
   run:
     import analysis2
-    ## WARNING: input files are hardcoded
-    dat = analysis2.load_shutter()
-    analysis2.print_metrics_fullpatch(dat,outfile=output[0])
-    analysis2.make_visual_table(dat,outfile=output[1])
+    analysis2.load_prediction_and_eval_metrics__generic(input[0])
 
-rule shutter_all:
-  input: rules.shutter_n2v2_all.input,
-         rules.shutter_n2gt.input,
-         rules.shutter_nlm.input,
-         rules.shutter_bm3d.input,
+rule shutter_n2v2_single:
+  output: F.shutterdir + 'mask{n}/'
+  run:
+    import n2v2_flower, predict
+    # d = n2v2_flower.setup_flower_shutter(F.shutterdata,output[0])
+    # ta = n2v2_flower.train(d,end_epoch=600,mask_shape=range(int(wildcards.n)))
+    predict.predict_on_full_2d_stack(F.shutterdata,output[0],output[0] + 'models/net600.pt')
+
+rule shutter_n2gt:
+  output: F.shutterdir + "n2gt2/"
+  run:
+    import n2gt_2d, predict
+    d  = n2gt_2d.setup_flower_shutter(F.shutterdata, output[0])
+    ta = n2gt_2d.init_training_artifacts()
+    n2gt_2d.train(d,ta,end_epoch=600);
+    predict.predict_on_full_2d_stack(F.shutterdata,output[0],output[0] + 'models/net600.pt')
+
+rule shutter_nlm:
+  output: F.shutter_dir_nlm
+  run:
+    import nlm_comparison
+    nlm_comparison.nlm_2d(F.shutterdata, output[0])
+
+rule shutter_bm3d:
+  output: F.shutter_dir_bm3d
+  run:
+    import nlm_comparison
+    nlm_comparison.bm3d_2d(F.shutterdata, output[0])
 
 
-## c. elegans
 
-times = [0,10,100,189]
-celedata = [f'/lustre/projects/project-broaddus/rawdata/celegans_isbi/Fluo-N3DH-CE/01/t{n:03d}.tif' for n in times]
-celedir  = '/lustre/projects/project-broaddus/denoise_experiments/cele/e01/'
-cele_n2v2_dirs  = [celedir + f'mask_1_x{n:02d}y{m:02d}/' for n in [0,1] for m in [0,4,8]]
-cele_n2v2_pimgs = [d + 'pimgs/pimg01_000.tif' for d in cele_n2v2_dirs]
-
-cele_nlm_vals = [5,10,50,100,200,500] + [9,11,40,70] + [14,20,30]
-cele_nlm_dirs = [celedir + f'nlm/{n:04d}/' for n in cele_nlm_vals]
 
 rule cele_top:
   input:
-    cele_n2v2_dirs,
-    cele_nlm_dirs,
-    cele_n2v2_pimgs,
+    F.cele_n2v2_dirs,
+    F.cele_nlm_dirs,
+    F.cele_n2v2_pimgs,
 
 rule cele_n2v2_train_wild:
-  output: celedir + 'mask_1_x{n}y{m}/'
+  output: F.celedir + 'mask_1_x{n}y{m}/'
   run:
     import n2v2_cele
     d  = n2v2_cele.setup(output[0])
@@ -192,8 +129,8 @@ rule cele_n2v2_train_wild:
     n2v2_cele.train(d, ta, end_epoch=100, xmask=range(int(wildcards.n)+1), ymask=range(int(wildcards.m)+1));
 
 rule cele_n2v2_predict_wild:
-  input:  celedir + 'mask_1_x{n}y{m}/'
-  output: celedir + 'mask_1_x{n}y{m}/pimgs/pimg01_000.tif'
+  input:  F.celedir + 'mask_1_x{n}y{m}/'
+  output: F.celedir + 'mask_1_x{n}y{m}/pimgs/pimg01_000.tif'
   run:
     import n2v2_cele
     d = n2v2_cele.setup(input[0])
@@ -201,46 +138,28 @@ rule cele_n2v2_predict_wild:
     n2v2_cele.predict_movies(d)
 
 rule cele_nlm_wild:
-  output: celedir + 'nlm/{n}/'
+  output: F.celedir + 'nlm/{n}/'
   run:
     import nlm_comparison
     sigma = int(wildcards.n)/100
     nlm_comparison.nlm_3d_cele(output[0], sigma=sigma)
 
-rule cele_analysis:
-  output:
-    celedir + 'table.png'
+localrules: correlation_analysis
+
+rule correlation_analysis:
+  output: F.d_correlation_analysis
   run:
     import analysis2
-    dat = analysis2.load_cele()
-    analysis2.make_visual_table_cele(dat,outfile=output[0])
+    analysis2.correlation_analysis(F.shutterdata, F.d_correlation_analysis, 'shut', removeGT=False)
+    analysis2.correlation_analysis(F.flowerdata,  F.d_correlation_analysis, 'fl',   removeGT=False)
+    analysis2.correlation_analysis(F.flowerdata,  F.d_correlation_analysis, 'flGT', removeGT=True)
 
-
-## figures!
-
-data_fig1 = [flowerdata,
-             n2v2_dirs[0][0]+'pred.tif',
-             n2v2_dirs[6][0]+'pred.tif',
-             ]
-
-localrules: fig1
-
-rule fig1:
-  input: flower_results, flower_table_tex
-  output: flowerdir + 'fig1/'
-  run:
-    import analysis2, shutil
-    from distutils import dir_util
-
-    analysis2.correlation_analysis(shutterdata,output[0],'shut',removeGT=False)
-    analysis2.correlation_analysis(flowerdata,output[0],'fl',removeGT=False)
-    analysis2.correlation_analysis(flowerdata,output[0],'flGT',removeGT=True)
-
-    analysis2.fig1(data_fig1,output[0])
-    for d in flower_results: shutil.copy(d,output[0])
-    shutil.copy(flower_table_tex,output[0])
-    # dir_util.copy_tree(flower_corr,data_fig1[3])
-    # dir_util.copy_tree(flower_corr,data_fig1[3])
+# rule fig_data:
+#   output: 
+#   run:
+#     import analysis2, shutil
+#     from distutils import dir_util
+#     analysis2.fig1()
 
 
 
