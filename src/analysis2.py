@@ -10,16 +10,37 @@ from pathlib   import Path
 from itertools import zip_longest
 from glob      import glob
 
+import matplotlib
 from matplotlib      import pyplot as plt
 plt.switch_backend('Agg')
-import matplotlib.gridspec as gridspec
+# import matplotlib.gridspec as gridspec
+from matplotlib import font_manager
+
+
+def set_global_times_font():
+  # prop = font_manager.FontProperties(fname='/projects/project-broaddus/install/fonts/times/Times New Roman Bold.ttf',size=10)
+  font = font_manager.get_font('/projects/project-broaddus/install/fonts/times/Times New Roman Bold.ttf')
+  font_manager.fontManager.ttflist.append(font)
+  # font_dirs = ['/projects/project-broaddus/install/fonts/times/',]
+  # font_files = font_manager.findSystemFonts(fontpaths=font_dirs)
+  # font_list = font_manager.createFontList(font_files)
+  # font_manager.fontManager.ttflist.append(font_list[-1])
+  # return prop, font_manager.fontManager.ttflist, font
+  matplotlib.rcParams['font.family'] = 'Times New Roman'
+  matplotlib.rcParams['font.size'] = 10
+  # matplotlib.rcParams['font.weight'] = 'normal'
+
+# /projects/project-broaddus/install/fonts/times/
+## times new roman doesn't exist on cluster!?
+# plt.rc('font',**{'family':['serif'], 'size':10, 'serif':['LiberationSerif-Regular']})
+# plt.rc('text', usetex=False)
 
 from scipy           import ndimage
 from scipy.ndimage   import label, zoom
 from scipy.signal    import correlate2d
 from skimage         import io
 from skimage.measure import compare_ssim
-from numpy.fft import fft2,ifft2,ifftshift
+from numpy.fft import fft2,ifft2,ifftshift,fftshift
 
 from uncertainties import unumpy
 
@@ -44,6 +65,7 @@ def stak(*args,axis=0): return np.stack(args, axis)
 def imsave(x, name, **kwargs): return tifffile.imsave(str(name), x, **kwargs)
 def imread(name,**kwargs): return tifffile.imread(str(name), **kwargs)
 
+import pickle
 ## zero parameter functions. produce final results. never change targets.
 ## these functions reference files.py, and typically they require many results from 
 ## within files.py, bringing them all together for analysis.
@@ -51,6 +73,233 @@ def imread(name,**kwargs): return tifffile.imread(str(name), **kwargs)
 import json
 import shutil
 import files
+
+
+## but also make figures!
+
+def load_flower_coleman(n2v='2', n2v2='06_4'):
+  "load from local copy of fileserver data"
+  d = SimpleNamespace()
+  d.flower = imread("/projects/project-broaddus/rawdata/artifacts/flower.tif")
+  d.flower = normalize3(d.flower,2,99.6)
+
+  d.n2v    = imread(f"/projects/project-broaddus/denoise_experiments/flower/e01/mask00_{n2v}/pred.tif")
+  d.n2v    = d.n2v[:,0].astype(np.float32)
+
+  d.n2v2   = imread(f"/projects/project-broaddus/denoise_experiments/flower/e01/mask{n2v2}/pred.tif")
+  d.n2v2   = d.n2v2[:,0].astype(np.float32)
+
+  return d
+
+def save_w_filter(e):
+  def f(k,v):
+    if 'fft' in k: return v
+    else: return v[15]
+  e2 = SimpleNamespace(**{k:f(k,v) for k,v in e.__dict__.items()})
+  pickle.dump(e2,open("/projects/project-broaddus/denoise_experiments/fig_data/e2.pkl",'wb'))
+
+## Intro
+
+def load_figdata():
+  d = SimpleNamespace()
+  d.flower       = imread(files.flowerdata)
+  d.flower       = normalize3(d.flower,2,99.6)
+  d.gt           = d.flower.mean(0)
+  d.shutter      = imread(files.shutterdata)
+  d.n2v          = imread(files.n2v2_dirs[0][2]+'pred.tif')[:,0]
+  d.n2v2         = imread(files.n2v2_dirs[6][4]+'pred.tif')[:,0]
+
+  d.flower  = d.flower[15]
+  d.shutter = d.shutter[15]
+  d.n2v     = d.n2v[15]
+  d.n2v2    = d.n2v2[15]
+
+  d.flower  = d.flower.astype(np.float32)
+  d.gt      = d.gt.astype(np.float32)
+  d.shutter = d.shutter.astype(np.float32)
+  d.n2v     = d.n2v.astype(np.float32)
+  d.n2v2    = d.n2v2.astype(np.float32)
+
+  pickle.dump(d, open(files.d_figdata + 'figdata.pkl','wb'))
+  return d
+
+
+@DeprecationWarning
+def intro(d):
+
+  x,y,dx,dy = 200,200,64,64
+  ss = slice(y,y+dy), slice(x,x+dx)
+  flower       = d.flower[ss]
+  gt           = d.gt[ss]
+  diff         = d.shutter[ss]
+  n2v          = d.n2v[ss]
+  n2v2         = d.n2v2[ss]
+
+  # flower       = io.imread("fig_data_old/flower.png")
+  # gt           = io.imread("fig_data_old/gt.png")
+  # diff         = io.imread("fig_data_old/shutter.png")
+  # n2v          = io.imread("fig_data_old/n2v.png")
+  # n2v2         = io.imread("fig_data_old/n2v2.png")
+
+  fig, ax = plt.subplots(nrows=2, ncols=3,figsize=(3.39,3.39*2/3), dpi=109*2)
+
+  corr_fl = np.load(files.d_figdata + "ca/corr_raw_fl.npy")
+  corr_fl = np.load(files.d_figdata + "ca/corr_raw_flGT.npy")
+  corr_shut = np.load(files.d_figdata + "ca/corr_raw_shut.npy")
+  corr = corr_shut
+
+  # ax[1,2].imshow(autocorr_img,cmap='magma',interpolation='nearest')
+  fontdict = {'color':'white'}
+
+  y,x,dx,dy = 256,256,64,64
+  ss = slice(y,y+dy), slice(x,x+dx)
+
+  import os
+  from matplotlib import font_manager as fm, rcParams
+  fpath = "/projects/project-broaddus/install/fonts/times/Times New Roman Bold.ttf" #"fonts/ttf/cmr10.ttf")
+  prop  = fm.FontProperties(fname=fpath,size=10)
+  name = os.path.split(fpath)[1]
+
+  ax[0,0].imshow(flower,cmap='magma',interpolation='nearest')
+  ax[0,0].set_axis_off()
+  ax[0,0].text(0.03,0.88,u"RAW",transform=ax[0,0].transAxes,fontproperties=prop,color='white')
+
+  ax[1,0].imshow(gt,cmap='magma',interpolation='nearest')
+  ax[1,0].set_axis_off()
+  ax[1,0].text(0.03,0.88,"GT",transform=ax[1,0].transAxes,fontproperties=prop,color='white')
+
+  ax[0,2].imshow(diff,cmap='magma',interpolation='nearest')
+  ax[0,2].set_axis_off()
+  ax[0,2].text(0.03,0.88,"NOISE",transform=ax[0,2].transAxes,fontproperties=prop,color='white')
+
+  # ax[1,2].imshow(corr,cmap='magma',interpolation='nearest')
+  # ax[1,2].set_axis_off()
+  # ax[1,2].plot(corr[5,:])
+  ax[1,2].text(0.0,0.88,"CORR",transform=ax[1,2].transAxes,fontproperties=prop,color='black')
+
+  ax[1,1].imshow(n2v2,cmap='magma',interpolation='nearest')
+  ax[1,1].set_axis_off()
+  ax[1,1].text(0.03,0.88,"N2V$_s$",transform=ax[1,1].transAxes,fontproperties=prop,color='white')
+
+  ax[0,1].imshow(n2v,cmap='magma',interpolation='nearest')
+  ax[0,1].set_axis_off()
+  ax[0,1].text(0.03,0.88,"N2V",transform=ax[0,1].transAxes,fontproperties=prop,color='white')
+
+  fig.subplots_adjust(left=0,bottom=0,right=1,top=1,wspace=0.03,hspace=0.03)
+
+
+  d0 = np.arange(corr.shape[0]) - corr.shape[0]//2
+  d1 = np.arange(corr.shape[1]) - corr.shape[1]//2
+
+  ax[1,2].set_yticks([])
+  ax[1,2].set_xticks([-10,10])
+  ax[1,2].spines['left'].set_position('zero')
+  ax[1,2].spines['bottom'].set_position('zero')
+  ax[1,2].spines['right'].set_visible(False)
+  ax[1,2].spines['top'].set_visible(False)
+
+  a,b = corr.shape
+  y = corr[:,b//2]
+  ax[1,2].plot(d0,y,'.-',lw=1,ms=1.5,label='y')
+  y = corr[a//2,:]
+  ax[1,2].plot(d1,y,'.-',lw=1,ms=1.5,label='x')
+  ax[1,2].grid(False, which='both')
+
+  ax11ins = ax[1,2].inset_axes([0.0,0.45,0.38,0.38])
+  central_slice = slice(a//2-4,a//2+5), slice(b//2-4,b//2+5)
+  ax11ins.imshow(corr[central_slice],cmap='gray',interpolation='nearest')
+
+  ax11ins.axhline(corr[central_slice].shape[0]/2-0.5,c='C1',lw=.5)
+  ax11ins.axvline(corr[central_slice].shape[1]/2-0.5,c='C0',lw=.5)
+  ax11ins.set_yticks([])
+  ax11ins.set_xticks([0,8])
+  ax11ins.set_xticklabels([-4,4])
+  ax11ins.tick_params(axis='x',size=2,labelsize=8,pad=2,)
+  for s in ['left', 'bottom', 'right', 'top']: ax11ins.spines[s].set_visible(False)
+
+  # ax[1,2].legend(loc='upper right',handlelength=2.0)
+
+  fig.savefig(files.d_figdata + "intro.pdf")
+  return fig,ax
+
+
+## FFT
+
+def add_fft(d):
+  def _fft(img):
+    img2 = img[15]
+    img2 = (img2-img2.mean())/img2.std()
+    img2 = np.abs(fftshift(fft2(img2)))
+    # img2 = normalize3(img2,0,99)
+    return img2
+  d.fft_flower = _fft(d.flower)
+  d.fft_n2v  = _fft(d.n2v)
+  d.fft_n2v2 = _fft(d.n2v2)
+
+def choose_the_mask(d):
+  fig,axs = plt.subplots(nrows=2,ncols=3,figsize=(3.39,3.39*2/3),dpi=127*2)
+  b,c = 1024,1024
+  ss1 = slice(b//2-20,b//2+20), slice(c//2-20,c//2+20)
+  ss2 = slice(b//2-256,b//2+256), slice(c//2-256,c//2+256)
+  ss2 = slice(None), slice(None)
+
+  e = SimpleNamespace()
+  e.flower = d.flower[15][ss1]
+  e.n2v = d.n2v[15][ss1].astype(np.float64)
+  e.n2v2 = d.n2v2[15][ss1]
+  e.fft_flower = d.fft_flower[ss2]
+  e.fft_n2v = d.fft_n2v[ss2]
+  e.fft_n2v2 = d.fft_n2v2[ss2]
+  for k,v in e.__dict__.items(): io.imsave(f'../../denoise_experiments/fig_data/mask_{k}.png',v)
+
+  axs[0,0].imshow(e.flower)
+  axs[0,1].imshow(e.n2v)
+  axs[0,2].imshow(e.n2v2)
+  axs[1,0].imshow(e.fft_flower)
+  axs[1,1].imshow(e.fft_n2v)
+  axs[1,2].imshow(e.fft_n2v2)
+  for a in axs.flat: a.axis('off')
+  fig.subplots_adjust(left=.005,bottom=.005,right=.995,top=.995,wspace=0.005,hspace=0.005)
+  return fig,axs
+
+def choose_the_mask_just_ffts(d):
+  fig,axs = plt.subplots(nrows=1,ncols=3,figsize=(3.39,3.39*1/3),dpi=127*2)
+
+  # import os
+  # from matplotlib import font_manager as fm, rcParams
+  # fpath = os.path.join("/projects/project-broaddus/install/fonts/times/Times New Roman Bold.ttf") #"fonts/ttf/cmr10.ttf")
+  # prop  = fm.FontProperties(fname=fpath,size=10)
+  # fname = os.path.split(fpath)[1]
+
+  d.fft_flower, d.fft_n2v, d.fft_n2v2 = normalize3(stak(d.fft_flower, d.fft_n2v, d.fft_n2v2,),2,99)
+
+  axs[0].imshow(d.fft_flower, interpolation='nearest')
+  axs[0].text(0.03,0.88,"RAW", transform=axs[0].transAxes, color='white')
+  axs[1].imshow(d.fft_n2v, interpolation='nearest')
+  axs[1].text(0.03,0.88,"N2V", transform=axs[1].transAxes, color='white')
+  axs[2].imshow(d.fft_n2v2, interpolation='nearest')
+  axs[2].text(0.03,0.88,"N2V$_s$", transform=axs[2].transAxes, color='white')
+  for a in axs.flat: a.axis('off')
+  fig.subplots_adjust(left=.005,bottom=.005,right=.995,top=.995,wspace=0.005,hspace=0.005)
+  fig.savefig('../../denoise_experiments/fig_data/ffts.pdf')
+
+  return fig,axs
+
+def savemany():
+  """
+  Ran it! After visual inspection the best result is '06_4' ... 
+  And after performing the same visual optimization over N2V=='00_?' we get '00_2' as the best.
+  NOTE: both searches only update the top right panel
+  """
+  # for s in [f'0{n}_{m}' for n in [3,4,5,6] for m in [0,1,2,3,4]]:
+  # for s in [f'00_{m}' for m in [0,1,2,3,4]]: 
+  s = '06_4'
+  e = load_flower_coleman(s)
+  add_fft(e)
+  fig,axs = choose_the_mask(e)
+  fig.savefig(f'../../denoise_experiments/fig_data/choose{s}.pdf')
+
+##
 
 def gather_results_to_figdata_dir():
   Path(files.d_figdata).mkdir(exist_ok=True,parents=True)
@@ -70,7 +319,12 @@ def gather_results_to_figdata_dir():
   imsave(imread(files.shutterdata)[:5], files.d_figdata + 'shutter.tif')
   
   imsave(np.array([imread(f) for f in files.celedata]), files.d_figdata + 'cele.tif')
+  cele_n2v2_dirs  
 
+def make_predtifs_smaller():
+  for p in glob("/projects/project-broaddus/denoise_experiments/flower/e01/mask??_?/pred.tif"):
+    img = imread(p)
+    imsave(img.astype(np.float16), p, compress=9)
 
 ### utils 
 

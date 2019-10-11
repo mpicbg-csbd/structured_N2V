@@ -1,5 +1,5 @@
 ## invoke with:
-## alias csnake='snakemake -j 10 --cluster-config cluster.yaml --cluster "sbatch -J {rule} -p {cluster.p} --gres {cluster.gres} -n {cluster.n} -t {cluster.t} -c {cluster.c} --mem {cluster.mem}"'
+## alias csnake='snakemake -j 50 --cluster-config cluster.yaml --cluster "sbatch -J {rule} -p {cluster.p} --gres {cluster.gres} -n {cluster.n} -t {cluster.t} -c {cluster.c} --mem {cluster.mem}" '
 ## (that's now in bashrc. e.g. usage below)
 ## csnake train_flower_n2gt
 # from types import SimpleNamespace
@@ -116,26 +116,23 @@ rule shutter_bm3d:
 
 rule cele_top:
   input:
-    F.cele_n2v2_dirs,
-    F.cele_nlm_dirs,
-    F.cele_n2v2_pimgs,
+    F.cele_n2v2_pimgs
 
-rule cele_n2v2_train_wild:
-  output: F.celedir + 'mask_1_x{n}y{m}/'
+# rule cele_n2v2_train_wild:
+#   output: F.celedir + 'mask_1_x{n}y{m}/'
+#   run:
+#     import n2v2_cele
+#     d  = n2v2_cele.setup(output[0])
+#     ta = n2v2_cele.init_training_artifacts()
+#     n2v2_cele.train(d, ta, end_epoch=100, xmask=range(int(wildcards.n)+1), ymask=range(int(wildcards.m)+1));
+#     n2v2_cele.predict_movies(d)
+
+rule cele_n2v2_pred_wild:
+  input: F.celedir + 'mask_1_x{n}y{m}/'
+  output: F.celedir + 'mask_1_x{n}y{m}/pimgs/'
   run:
     import n2v2_cele
-    d  = n2v2_cele.setup(output[0])
-    ta = n2v2_cele.init_training_artifacts()
-    n2v2_cele.train(d, ta, end_epoch=100, xmask=range(int(wildcards.n)+1), ymask=range(int(wildcards.m)+1));
-
-rule cele_n2v2_predict_wild:
-  input:  F.celedir + 'mask_1_x{n}y{m}/'
-  output: F.celedir + 'mask_1_x{n}y{m}/pimgs/pimg01_000.tif'
-  run:
-    import n2v2_cele
-    d = n2v2_cele.setup(input[0])
-    d.net.load_state_dict(n2v2_cele.torch.load(input[0] + 'models/net100.pt'))
-    n2v2_cele.predict_movies(d)
+    n2v2_cele.predict_from_new(input[0])
 
 rule cele_nlm_wild:
   output: F.celedir + 'nlm/{n}/'
@@ -144,9 +141,9 @@ rule cele_nlm_wild:
     sigma = int(wildcards.n)/100
     nlm_comparison.nlm_3d_cele(output[0], sigma=sigma)
 
-localrules: correlation_analysis
 
-rule correlation_analysis:
+localrules: correlation_analysis
+rule        correlation_analysis:
   output: F.d_correlation_analysis
   run:
     import analysis2

@@ -46,7 +46,8 @@ celedata = [f'/lustre/projects/project-broaddus/rawdata/celegans_isbi/Fluo-N3DH-
 celedir  = '/lustre/projects/project-broaddus/denoise_experiments/cele/e01/'
 cele_n2v2_dirs  = [celedir + f'mask_1_x{n:02d}y{m:02d}/' for n in [0,1] for m in [0,4,8]]
 ## TODO: this list is incomplete. probably an antipattern.
-cele_n2v2_pimgs = [d + 'pimgs/pimg01_000.tif' for d in cele_n2v2_dirs]
+# cele_n2v2_pimgs = [d + 'pimgs/pimg01_000.tif' for d in cele_n2v2_dirs]
+cele_n2v2_pimgs = [d + 'pimgs/' for d in cele_n2v2_dirs]
 
 cele_nlm_vals = [5,10,50,100,200,500] + [9,11,40,70] + [14,20,30]
 cele_nlm_dirs = [celedir + f'nlm/{n:04d}/' for n in cele_nlm_vals]

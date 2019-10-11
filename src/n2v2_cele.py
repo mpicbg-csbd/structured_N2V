@@ -52,10 +52,8 @@ def init_dirs(savedir):
   savedir.mkdir(exist_ok=True)
   (savedir/'epochs/').mkdir(exist_ok=True)
   (savedir/'epochs_npy/').mkdir(exist_ok=True)
-  (savedir/'pimgs/').mkdir(exist_ok=True)
-  (savedir/'pts/').mkdir(exist_ok=True)
-  (savedir/'movie/').mkdir(exist_ok=True)
-  (savedir/'counts/').mkdir(exist_ok=True)
+  # (savedir/'pts/').mkdir(exist_ok=True)
+  # (savedir/'counts/').mkdir(exist_ok=True)
   (savedir/'models/').mkdir(exist_ok=True)
 
   # shutil.copy2('/lustre/projects/project-broaddus/devseg_code/detect/n2v2_cele.py', savedir)
@@ -392,6 +390,7 @@ def apply_net_tiled(net,img):
   img_padded = np.pad(img,[(0,0),(ZPAD,ZPAD+q),(YPAD,YPAD+r),(XPAD,XPAD+s)],mode='constant') ## pad for patch borders
   output = np.zeros(img.shape)
 
+  zs = np.r_[:a:16]
   ys = np.r_[:b:200]
   xs = np.r_[:c:200]
 
@@ -401,7 +400,7 @@ def apply_net_tiled(net,img):
     patch = img_padded[:,z:qe+2*ZPAD,y:re+2*YPAD,x:se+2*XPAD]
     patch = torch.from_numpy(patch).cuda().float()
     patch = net(patch[None])[0,:,ZPAD:-ZPAD,YPAD:-YPAD,XPAD:-XPAD].detach().cpu().numpy()
-
+    output[:,z:ae,y:be,x:ce] = patch[:,:ae-z,:be-y,:ce-x]
 
   return output
 
@@ -431,6 +430,7 @@ def analyze_losses(d,ta):
   plt.savefig(d.savedir / 'lossdist_unsorted.pdf')
 
 
+@DeprecationWarning
 def fig2_shutterclosed_comparison():
   img1 = np.load('/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele1/epochs_npy/arr_080.npy')
   img2 = np.load('/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele2/epochs_npy/arr_080.npy')
@@ -474,14 +474,16 @@ def fig2_shutterclosed_comparison():
   return rgb
 
 
-
 def predict_movies(d):
   "make movies scrolling through z"
+  d.savedir = Path(d.savedir)
+  (d.savedir/'pimgs/').mkdir(exist_ok=True)
+  (d.savedir/'movie/').mkdir(exist_ok=True)  
 
   ds = "01"
   for i in [0,10,100,189]:
   # for i in [189]:
-    img = imread(f'/lustre/projects/project-broaddus/devseg_data/raw/celegans_isbi/Fluo-N3DH-CE/{ds}/t{i:03d}.tif')
+    img = imread(f'/lustre/projects/project-broaddus/rawdata/celegans_isbi/Fluo-N3DH-CE/{ds}/t{i:03d}.tif')
     # lab = imread(f'/lustre/projects/project-broaddus/devseg_data/raw/celegans_isbi/Fluo-N3DH-CE/{ds}_GT/TRA/man_track{i:03d}.tif')
 
     # pmin, pmax = np.random.uniform(1,3), np.random.uniform(99.5,99.8)
@@ -493,8 +495,8 @@ def predict_movies(d):
 
     rgb = cat(img, pimg[0], axis=1)
     rgb = rgb.clip(min=0)
-    moviesave(normalize3(rgb), d.savedir/f'movie/vert{ds}_{i:03d}.mp4', rate=4)
-    imsave(pimg, d.savedir/f'pimgs/pimg{ds}_{i:03d}.tif')
+    # moviesave(normalize3(rgb), d.savedir/f'movie/vert{ds}_{i:03d}.mp4', rate=4)
+    imsave(pimg.astype(np.float16), d.savedir/f'pimgs/pimg{ds}_{i:03d}.tif', compress=9)
 
     if False:
       rgb = i2rgb(img)
@@ -504,6 +506,12 @@ def predict_movies(d):
       moviesave(normalize3(pimg[0]), d.savedir/f'movie/pimg{i:03d}.mp4', rate=4) ## set i=30 and i=150 to get res022 and res023.
       moviesave(normalize3(rgb), d.savedir/f'movie/mix{i:03d}.mp4', rate=4)
 
+def predict_from_new(modeldir):
+    d = SimpleNamespace()
+    d.savedir = modeldir
+    d.net = torch_models.Unet2(16,[[1],[1]],finallayer=nn.ReLU).cuda()
+    d.net.load_state_dict(torch.load(modeldir+'models/net100.pt'))
+    predict_movies(d)
 
   ## make histogram of pimg values at points
 
