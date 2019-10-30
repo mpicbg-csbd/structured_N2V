@@ -55,36 +55,6 @@ def make_predtifs_smaller():
     imsave(img.astype(np.float16), p, compress=9)
 
 
-## Intro
-
-def collect_data_intro_fig():
-  """
-  highlight: 
-  failure case: flower 307 498
-  
-  """
-  d = SimpleNamespace()
-  d.flower       = imread(files.flowerdata)
-  d.flower       = normalize3(d.flower,2,99.6)
-  d.gt           = d.flower.mean(0)
-  d.shutter      = imread(files.shutterdata)
-  d.n2v          = imread(files.n2v2_dirs[0][2]+'pred.tif')[:,0]
-  d.n2v2         = imread(files.n2v2_dirs[6][4]+'pred.tif')[:,0]
-
-  d.flower  = d.flower[15]
-  d.shutter = d.shutter[15]
-  d.n2v     = d.n2v[15]
-  d.n2v2    = d.n2v2[15]
-
-  d.flower  = d.flower.astype(np.float32)
-  d.gt      = d.gt.astype(np.float32)
-  d.shutter = d.shutter.astype(np.float32)
-  d.n2v     = d.n2v.astype(np.float32)
-  d.n2v2    = d.n2v2.astype(np.float32)
-
-  pickle.dump(d, open(files.d_figdata + 'intro.pkl','wb'))
-  return d
-
 ## Table
 
 def collect_data_scores_table():
@@ -92,9 +62,9 @@ def collect_data_scores_table():
   res  = utils.recursive_map2(csv2floatList, files.all_tables)
   json.dump(res,open(files.d_figdata + 'allscores.json','w'))
 
-
 ### utils 
 
+@DeprecationWarning
 def save_w_filter(e):
   def f(k,v):
     if 'fft' in k: return v
@@ -130,6 +100,7 @@ def load_prediction_and_eval_metrics__generic(rawdata, loaddir):
   header=['mse','psnr','ssim']
   writecsv([header,met], loaddir / 'table.csv')
 
+@DeprecationWarning
 def correlation_analysis(rawdata,savedir,name,removeGT=False):
   savedir = Path(savedir); savedir.mkdir(exist_ok=True,parents=True)
 
@@ -173,6 +144,7 @@ def eval_single_metrics(gt,ys,nth=1):
   ssim = ssim.mean()
   return [mse,psnr,ssim]
 
+#### note: moved to local `mkfigs` along with correlation_analysis
 def autocorrelation(x):
     """
     2D autocorrelation
@@ -187,7 +159,8 @@ def autocorrelation(x):
     pi = np.fft.fftshift(pi)
     return pi.real
 
-## old data loading
+## old data loading. All deprecated. 
+## rsync raw data to local and use `load_from_project_broaddus` to open multiple for initial visual comparison
 
 def load_flower():
 
@@ -337,7 +310,8 @@ def load_cele():
   dat  = SimpleNamespace(raw=raw,n2v2=n2v2,nlm=nlm,n2v=n2v)
   return dat
 
-## old evaluation
+## old evaluation. All deprecated.
+## numerical comparison now done in parallel per-dataset with `load_prediction_and_eval_metrics__generic`
 
 def eval_single(gt,ys,name,nth=1):
   met = eval_single_metrics(gt,ys,nth)

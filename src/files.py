@@ -24,13 +24,15 @@ all_tables     = {'n2v':n2v2_tables, 'n2gt':n2gt_tables, 'nlm':nlm_tables, 'bm3d
 
 d_figdata = '/lustre/projects/project-broaddus/denoise_experiments/fig_data/'
 
-flower_results = [
-                  d_figdata + 'table_mse.pdf',
-                  d_figdata + 'table_psnr.pdf',
-                  d_figdata + 'table_ssim.pdf',
-                  ]
-flower_table_tex = d_figdata + 'table.tex'
-d_correlation_analysis = d_figdata + 'ca/'
+flower_results = d_figdata + 'allscores.json'
+
+# flower_results = [
+#                   d_figdata + 'table_mse.pdf',
+#                   d_figdata + 'table_psnr.pdf',
+#                   d_figdata + 'table_ssim.pdf',
+#                   ]
+# flower_table_tex = d_figdata + 'table.tex'
+# d_correlation_analysis = d_figdata + 'ca/'
 
 ## shutter data
 

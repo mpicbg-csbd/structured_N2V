@@ -8,8 +8,6 @@
 import files as F
 
 localrules:
-  shutter_nlm_all,
-  cele_nlm_all,
   flower_analysis_wild,
   flower_analysis_merge,
 
@@ -20,7 +18,6 @@ rule void:
 rule flower_top:
   input: 
     F.flower_results,
-    F.flower_table_tex,
 
 rule flower_n2v2_wild:
   output: F.flowerdir + 'mask{n}_{m}/'
@@ -63,12 +60,11 @@ rule flower_analysis_merge:
   output: F.flower_results, F.flower_table_tex
   run:
     import analysis2
-    analysis2.merge_all_results()
-    analysis2.make_metrics_table()
+    analysis2.collect_data_scores_table()
 
 
 
-
+localrules: shutter_analysis_wild
 
 rule shuttertop:
   input:
@@ -142,14 +138,14 @@ rule cele_nlm_wild:
     nlm_comparison.nlm_3d_cele(output[0], sigma=sigma)
 
 
-localrules: correlation_analysis
-rule        correlation_analysis:
-  output: F.d_correlation_analysis
-  run:
-    import analysis2
-    analysis2.correlation_analysis(F.shutterdata, F.d_correlation_analysis, 'shut', removeGT=False)
-    analysis2.correlation_analysis(F.flowerdata,  F.d_correlation_analysis, 'fl',   removeGT=False)
-    analysis2.correlation_analysis(F.flowerdata,  F.d_correlation_analysis, 'flGT', removeGT=True)
+# localrules: correlation_analysis
+# rule        correlation_analysis:
+#   output: F.d_correlation_analysis
+#   run:
+#     import analysis2
+#     analysis2.correlation_analysis(F.shutterdata, F.d_correlation_analysis, 'shut', removeGT=False)
+#     analysis2.correlation_analysis(F.flowerdata,  F.d_correlation_analysis, 'fl',   removeGT=False)
+#     analysis2.correlation_analysis(F.flowerdata,  F.d_correlation_analysis, 'flGT', removeGT=True)
 
 # rule fig_data:
 #   output: 
