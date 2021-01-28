@@ -36,6 +36,7 @@ def imsave(x, name, **kwargs): return tifffile.imsave(str(name), x, **kwargs)
 def imread(name,**kwargs): return tifffile.imread(str(name), **kwargs)
 
 import pickle
+
 ## zero parameter functions. produce final results. never change targets.
 ## these functions reference files.py, and typically they require many results from 
 ## within files.py, bringing them all together for analysis.
@@ -43,6 +44,7 @@ import pickle
 import json
 import shutil
 import files
+import ipdb
 
 
 
@@ -78,11 +80,12 @@ def csv2floatList(csvfile):
 
 ## parameterized funcs. have no knowledge of filesys.
 
-def load_prediction_and_eval_metrics__generic(rawdata, loaddir):
-  raw_all = imread(rawdata)
+def load_prediction_and_eval_metrics__generic(loaddir):
+  raw_all = imread("/projects/project-broaddus/rawdata/artifacts/flower.tif")
   raw_all = normalize3(raw_all,2,99.6)
   gt  = raw_all.mean(0)
 
+  # loaddir = Path(tablefile).parent
   ## deal with heterogeneous file names  
   loaddir = Path(loaddir)
   if (loaddir / 'denoised.tif').exists():
@@ -97,7 +100,7 @@ def load_prediction_and_eval_metrics__generic(rawdata, loaddir):
 
   met = eval_single_metrics(gt, img)
 
-  header=['mse','psnr','ssim']
+  header=['mse','psnr','ssim','corr']
   writecsv([header,met], loaddir / 'table.csv')
 
 @DeprecationWarning
@@ -137,27 +140,28 @@ def correlation_analysis(rawdata,savedir,name,removeGT=False):
 ### utils. pure funcs.
 
 def eval_single_metrics(gt,ys,nth=1):
-  ys   = ys[::nth]
+  ys   = ys[::nth].astype(np.float32)
   mse  = ((gt-ys)**2).mean((0,1,2))
   psnr = 10*np.log10(1/mse)
   ssim = np.array([compare_ssim(gt,ys[i].astype(np.float64)) for i in range(ys.shape[0]//50)])
   ssim = ssim.mean()
-  return [mse,psnr,ssim]
+  corr = ((gt-gt.mean())*(ys-ys.mean())).mean() / (gt.std() * ys.std())
+  return [mse,psnr,ssim,corr]
 
 #### note: moved to local `mkfigs` along with correlation_analysis
 def autocorrelation(x):
-    """
-    2D autocorrelation
-    remove mean per-patch (not global GT)
-    normalize stddev to 1
-    """
-    x = (x - np.mean(x))/np.std(x)
-    # x = np.pad(x, [(50,50),(50,50)], mode='constant')
-    f = fft2(x)
-    p = np.abs(f)**2
-    pi = ifft2(p)
-    pi = np.fft.fftshift(pi)
-    return pi.real
+  """
+  2D autocorrelation
+  remove mean per-patch (not global GT)
+  normalize stddev to 1
+  """
+  x = (x - np.mean(x))/np.std(x)
+  # x = np.pad(x, [(50,50),(50,50)], mode='constant')
+  f = fft2(x)
+  p = np.abs(f)**2
+  pi = ifft2(p)
+  pi = np.fft.fftshift(pi)
+  return pi.real
 
 ## old data loading. All deprecated. 
 ## rsync raw data to local and use `load_from_project_broaddus` to open multiple for initial visual comparison

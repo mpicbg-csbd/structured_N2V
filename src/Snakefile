@@ -2,8 +2,9 @@
 ## alias csnake='snakemake -j 50 --cluster-config cluster.yaml --cluster "sbatch -J {rule} -p {cluster.p} --gres {cluster.gres} -n {cluster.n} -t {cluster.t} -c {cluster.c} --mem {cluster.mem}" '
 ## (that's now in bashrc. e.g. usage below)
 ## csnake train_flower_n2gt
-# from types import SimpleNamespace
-# from utils import flatten, recursive_map2
+
+from types import SimpleNamespace
+from utils import flatten, recursive_map2
 
 import files as F
 
@@ -12,11 +13,24 @@ localrules:
   flower_analysis_merge,
 
 ## flower data
+rule all:
+  input:
+    [f"/projects/project-broaddus/denoise_experiments/cele/e01/nlm2_3d/t{count:03d}.tif" for count in range(120)],
 
-rule void:
+
+rule nlmwild:
+  output: "/projects/project-broaddus/denoise_experiments/cele/e01/nlm2_3d/t{count}.tif"
+  run:
+    import nlm_comparison
+    print(wildcards.count)
+    # nlm_comparison.nlm_3d_cele_just189()
+
+
+
 
 rule flower_top:
   input: 
+    F.all_tables.values(),
     F.flower_results,
 
 rule flower_n2v2_wild:
@@ -57,7 +71,7 @@ rule flower_analysis_wild:
 
 rule flower_analysis_merge:
   input: F.all_tables.values()
-  output: F.flower_results, F.flower_table_tex
+  output: F.flower_results #, F.flower_table_tex
   run:
     import analysis2
     analysis2.collect_data_scores_table()
@@ -108,11 +122,7 @@ rule shutter_bm3d:
     nlm_comparison.bm3d_2d(F.shutterdata, output[0])
 
 
-
-
-rule cele_top:
-  input:
-    F.cele_n2v2_pimgs
+# cele_home = '/lustre/projects/project-broaddus/denoise_experiments/cele/e01/'
 
 # rule cele_n2v2_train_wild:
 #   output: F.celedir + 'mask_1_x{n}y{m}/'
@@ -124,35 +134,19 @@ rule cele_top:
 #     n2v2_cele.predict_movies(d)
 
 rule cele_n2v2_pred_wild:
-  input: F.celedir + 'mask_1_x{n}y{m}/'
-  output: F.celedir + 'mask_1_x{n}y{m}/pimgs/'
+  input: F.cele.d_home + 'mask_1_x{n}y{m}/'
+  output: F.cele.d_home + 'mask_1_x{n}y{m}/pimgs/'
   run:
     import n2v2_cele
     n2v2_cele.predict_from_new(input[0])
 
 rule cele_nlm_wild:
-  output: F.celedir + 'nlm/{n}/'
+  output: F.cele.d_home + 'nlm/{n}/'
   run:
     import nlm_comparison
     sigma = int(wildcards.n)/100
     nlm_comparison.nlm_3d_cele(output[0], sigma=sigma)
 
-
-# localrules: correlation_analysis
-# rule        correlation_analysis:
-#   output: F.d_correlation_analysis
-#   run:
-#     import analysis2
-#     analysis2.correlation_analysis(F.shutterdata, F.d_correlation_analysis, 'shut', removeGT=False)
-#     analysis2.correlation_analysis(F.flowerdata,  F.d_correlation_analysis, 'fl',   removeGT=False)
-#     analysis2.correlation_analysis(F.flowerdata,  F.d_correlation_analysis, 'flGT', removeGT=True)
-
-# rule fig_data:
-#   output: 
-#   run:
-#     import analysis2, shutil
-#     from distutils import dir_util
-#     analysis2.fig1()
 
 
 

@@ -46,7 +46,7 @@ import torch_models
 
 # savedir = Path('/lustre/projects/project-broaddus/devseg_data/cl_datagen/grid/cele4/')
 
-## lightweight funcs and utils
+## lightweight, universal funcs and utils
 
 def init_dirs(savedir):
   savedir.mkdir(exist_ok=True)
@@ -85,11 +85,11 @@ def i2rgb(img):
   img = img.astype(np.float)
   return img
 
-def receptivefield(net):
+def receptivefield3d(net,kern=(3,5,5)):
   "calculate and show the receptive field or receptive kernel"
   def rfweights(m):
     if type(m) == nn.Conv3d:
-      m.weight.data.fill_(1/75) ## conv kernel 3*5*5
+      m.weight.data.fill_(1/np.prod(kern)) ## conv kernel 3*5*5
       m.bias.data.fill_(0.0)
   net.apply(rfweights);
   x0 = np.zeros((128,128,128)); x0[64,64,64]=1;
@@ -97,9 +97,20 @@ def receptivefield(net):
   io.imsave(savedir/'recfield_xy.png',normalize3(xout[0,0,64]))
   io.imsave(savedir/'recfield_xz.png',normalize3(xout[0,0,:,64]))
 
+def receptivefield2d(net,kern=(5,5)):
+  "calculate and show the receptive field or receptive kernel"
+  def rfweights(m):
+    if type(m) == nn.Conv2d:
+      m.weight.data.fill_(1/np.prod(kern)) ## conv kernel 3*5*5
+      m.bias.data.fill_(0.0)
+  net.apply(rfweights);
+  x0 = np.zeros((256,256)); x0[128,128]=1;
+  xout = net.cuda()(torch.from_numpy(x0)[None,None].float().cuda()).detach().cpu().numpy()
+  io.imsave(savedir/'recfield_xy.png',normalize3(xout[0,0]))
+
 def init_weights(m):
   "use as arg in net.apply()"
-  if type(m) == nn.Conv3d:
+  if type(m) in [nn.Conv2d, nn.Conv3d]:
     torch.nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
     m.bias.data.fill_(0.05)
 

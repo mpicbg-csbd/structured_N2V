@@ -88,7 +88,7 @@ def i2rgb(img):
   img = img.astype(np.float)
   return img
 
-def receptivefield(net):
+def receptivefield2d(net):
   "calculate and show the receptive field or receptive kernel"
   def rfweights(m):
     if type(m) == nn.Conv2d:

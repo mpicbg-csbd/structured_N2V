@@ -1,4 +1,4 @@
-# from types import SimpleNamespace
+from types import SimpleNamespace
 from utils import flatten, recursive_map2
 
 flowerdata = '/lustre/projects/project-broaddus/rawdata/artifacts/flower.tif'
@@ -6,7 +6,7 @@ flowerdir  = '/lustre/projects/project-broaddus/denoise_experiments/flower/e01/'
 
 ## flower data
 
-## flowerdir  = '/Users/broaddus/Desktop/falconhome/denoise_experiments/flower/e01/'
+# flowerdir  = '/Users/broaddus/Desktop/falconhome/denoise_experiments/flower/e01/'
 
 ## n2v2_dirs has axes "model" x "trial"
 n2v2_dirs      = [[flowerdir + f'mask{n:02d}_{m}/' for m in range(6)] for n in range(13)]
@@ -43,16 +43,17 @@ shutter_dir_bm3d = shutterdir + 'bm3d/'
 
 ## c. elegans
 
-times = [0,10,100,189]
-celedata = [f'/lustre/projects/project-broaddus/rawdata/celegans_isbi/Fluo-N3DH-CE/01/t{n:03d}.tif' for n in times]
-celedir  = '/lustre/projects/project-broaddus/denoise_experiments/cele/e01/'
-cele_n2v2_dirs  = [celedir + f'mask_1_x{n:02d}y{m:02d}/' for n in [0,1] for m in [0,4,8]]
+cele = SimpleNamespace()
+cele.times  = [0,10,100,189]
+cele.f_raw  = [f'/lustre/projects/project-broaddus/rawdata/celegans_isbi/Fluo-N3DH-CE/01/t{n:03d}.tif' for n in cele.times]
+cele.d_home = '/lustre/projects/project-broaddus/denoise_experiments/cele/e01/'
+cele.d_n2v2  = [cele.d_home + f'mask_1_x{n:02d}y{m:02d}/' for n in [0,1] for m in [0,4,8]]
 ## TODO: this list is incomplete. probably an antipattern.
 # cele_n2v2_pimgs = [d + 'pimgs/pimg01_000.tif' for d in cele_n2v2_dirs]
-cele_n2v2_pimgs = [d + 'pimgs/' for d in cele_n2v2_dirs]
+cele.d_pred = [d + 'pimgs/' for d in cele.d_n2v2]
 
-cele_nlm_vals = [5,10,50,100,200,500] + [9,11,40,70] + [14,20,30]
-cele_nlm_dirs = [celedir + f'nlm/{n:04d}/' for n in cele_nlm_vals]
+cele.nlm_sigmas = [5,10,50,100,200,500] + [9,11,40,70] + [14,20,30]
+cele.d_nlm = [cele.d_home + f'nlm/{n:04d}/' for n in cele.nlm_sigmas]
 
 
 
