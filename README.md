@@ -1,8 +1,16 @@
+
+
 ## StructN2V: Removing Structured Noise with Self-Supervised Blind-Spot Networks
 
-Code for [paper](https://colemanbroad.github.io/colemanb-net/Removing%20Structured%20Noise%20With%20Self-supervised%20Blind-spot%20Networks.pdf)
+StructN2V is a technique for removing structured noise from images using self-supervised convolutional neural networks.
 
-Please cite as
+![Example on C. elegans](img/celegans.png)
+
+See the [paper](https://colemanbroad.github.io/colemanb-net/Removing%20Structured%20Noise%20With%20Self-supervised%20Blind-spot%20Networks.pdf).
+
+See the [technology feature](https://www.nature.com/articles/d41586-021-00023-0) in Nature.
+
+Please cite as,
 
 ```
 @inproceedings{broaddus2020structn2v,
@@ -13,3 +21,4 @@ Please cite as
   organization={IEEE},
 }
 ```
+
